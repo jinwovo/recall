@@ -1,13 +1,11 @@
 package com.portfolio.recall.ingestion;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.portfolio.recall.common.Hashing;
 import com.portfolio.recall.embedding.EmbeddingClient;
 import com.portfolio.recall.search.ChunkDocument;
 import com.portfolio.recall.search.DocumentIndex;
 import io.micrometer.core.instrument.MeterRegistry;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.util.HexFormat;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -54,7 +52,7 @@ public class IngestionConsumer {
             }
             for (int i = 0; i < chunks.size(); i++) {
                 String content = chunks.get(i);
-                String hash = sha256(event.docId() + ":" + i + ":" + content);
+                String hash = Hashing.chunkId(event.docId(), i, content);
                 index.upsert(new ChunkDocument(
                         event.docId(), i, content, event.source(), event.lang(), hash, vectors.get(i)));
             }
@@ -67,12 +65,4 @@ public class IngestionConsumer {
         }
     }
 
-    private static String sha256(String s) {
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            return HexFormat.of().formatHex(md.digest(s.getBytes(StandardCharsets.UTF_8)));
-        } catch (Exception e) {
-            throw new IllegalStateException(e);
-        }
-    }
 }

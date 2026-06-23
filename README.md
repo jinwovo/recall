@@ -136,12 +136,13 @@ Scaffold + core paths implemented; being built toward the milestones in
 - Async ingestion (Kafka) with content-hash idempotency
 - Query log (Postgres/JPA), Micrometer metrics + provisioned Grafana dashboard
 - Next.js UI with streamed answers + clickable citation → source highlight
+- **Helm chart** (k8s) for backend + embedding sidecar — probes, ConfigMap/Secret, `helm lint` in CI
+- **Unit tests**: RRF fusion, cosine similarity, hash idempotency, chunker overlap, model tiering
 
 **Planned / TODO**
 - Claude **native citations** (replace `[n]` convention) + post-hoc LLM-judge groundedness
 - MinIO raw-doc storage on the ingestion path; dead-letter + retry
 - Enable the Testcontainers idempotency IT in CI; eval regression gate
-- Helm chart for k8s
 
 > Status note: the backend compiles and unit tests pass in CI, the frontend builds,
 > and the sidecar passes syntax checks (see the Actions tab). A full end-to-end run

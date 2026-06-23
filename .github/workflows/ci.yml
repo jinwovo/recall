@@ -48,3 +48,11 @@ jobs:
           python-version: "3.11"
       # Syntax check only — full lint/test added once deps are pinned for CI.
       - run: python -m compileall app
+
+  helm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - run: helm lint deploy/helm/recall
+      - run: helm template recall deploy/helm/recall > /dev/null

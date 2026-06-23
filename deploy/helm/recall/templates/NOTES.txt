@@ -1,0 +1,10 @@
+Recall deployed as release "{{ .Release.Name }}".
+
+Backend service:   {{ include "recall.fullname" . }}-backend:{{ .Values.backend.port }}
+Embedding service: {{ include "recall.fullname" . }}-embedding:{{ .Values.embedding.port }}
+
+Port-forward the API locally:
+  kubectl port-forward svc/{{ include "recall.fullname" . }}-backend {{ .Values.backend.port }}:{{ .Values.backend.port }}
+
+Reminder: create the secret "{{ .Values.secret.name }}" (anthropic-api-key, postgres-password)
+and provide Elasticsearch / Redis / Postgres / Kafka (see values.config.*) before traffic.

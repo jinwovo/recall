@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "recall.fullname" . }}-config
+  labels:
+    {{- include "recall.labels" . | nindent 4 }}
+data:
+  ES_HOST: {{ .Values.config.esHost | quote }}
+  ES_INDEX: {{ .Values.config.esIndex | quote }}
+  REDIS_HOST: {{ .Values.config.redisHost | quote }}
+  REDIS_PORT: {{ .Values.config.redisPort | quote }}
+  POSTGRES_HOST: {{ .Values.config.postgresHost | quote }}
+  POSTGRES_PORT: {{ .Values.config.postgresPort | quote }}
+  POSTGRES_DB: {{ .Values.config.postgresDb | quote }}
+  POSTGRES_USER: {{ .Values.config.postgresUser | quote }}
+  KAFKA_BOOTSTRAP_SERVERS: {{ .Values.config.kafkaBootstrap | quote }}
+  EMBEDDING_SERVICE_URL: {{ printf "http://%s-embedding:%v" (include "recall.fullname" .) .Values.embedding.port | quote }}

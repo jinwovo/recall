@@ -1,0 +1,42 @@
+nameOverride: ""
+
+backend:
+  image:
+    repository: ghcr.io/jinwovo/recall-backend
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicaCount: 2
+  port: 8080
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { cpu: "1", memory: 1Gi }
+
+embedding:
+  image:
+    repository: ghcr.io/jinwovo/recall-embedding
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  port: 8000
+  resources:
+    requests: { cpu: 500m, memory: 2Gi }
+    limits: { cpu: "2", memory: 4Gi }
+
+# External backing services — provide your own (managed or via subcharts).
+config:
+  esHost: http://elasticsearch:9200
+  esIndex: recall-docs
+  redisHost: redis
+  redisPort: "6379"
+  postgresHost: postgres
+  postgresPort: "5432"
+  postgresDb: recall
+  postgresUser: recall
+  kafkaBootstrap: kafka:9092
+
+# Secret with sensitive values — create separately, e.g.:
+#   kubectl create secret generic recall-secrets \
+#     --from-literal=anthropic-api-key=sk-ant-... \
+#     --from-literal=postgres-password=...
+secret:
+  name: recall-secrets

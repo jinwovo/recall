@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "recall.fullname" . }}-embedding
+  labels:
+    {{- include "recall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: embedding
+spec:
+  replicas: {{ .Values.embedding.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: embedding
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: embedding
+    spec:
+      containers:
+        - name: embedding
+          image: "{{ .Values.embedding.image.repository }}:{{ .Values.embedding.image.tag }}"
+          imagePullPolicy: {{ .Values.embedding.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.embedding.port }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.embedding.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.embedding.port }}
+            initialDelaySeconds: 60
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.embedding.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "recall.fullname" . }}-embedding
+  labels:
+    {{- include "recall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: embedding
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: embedding
+  ports:
+    - name: http
+      port: {{ .Values.embedding.port }}
+      targetPort: {{ .Values.embedding.port }}

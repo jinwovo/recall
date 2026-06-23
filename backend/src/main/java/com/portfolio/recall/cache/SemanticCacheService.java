@@ -1,6 +1,7 @@
 package com.portfolio.recall.cache;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.portfolio.recall.common.VectorMath;
 import com.portfolio.recall.config.RecallProperties;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.Optional;
@@ -41,7 +42,7 @@ public class SemanticCacheService {
         return redis.<String, String>opsForHash().values(KEY)
                 .map(this::parse)
                 .filter(e -> e != null && e.embedding() != null)
-                .map(e -> new Scored(cosine(queryEmbedding, e.embedding()), e.answer()))
+                .map(e -> new Scored(VectorMath.cosine(queryEmbedding, e.embedding()), e.answer()))
                 .filter(s -> s.score() >= threshold)
                 .sort((a, b) -> Double.compare(b.score(), a.score()))
                 .next()
@@ -67,19 +68,6 @@ public class SemanticCacheService {
                     log.warn("semantic cache put failed: {}", e.getMessage());
                     return Mono.empty();
                 });
-    }
-
-    private static double cosine(float[] a, float[] b) {
-        if (a.length != b.length) {
-            return -1;
-        }
-        double dot = 0, na = 0, nb = 0;
-        for (int i = 0; i < a.length; i++) {
-            dot += a[i] * b[i];
-            na += a[i] * a[i];
-            nb += b[i] * b[i];
-        }
-        return (na == 0 || nb == 0) ? -1 : dot / (Math.sqrt(na) * Math.sqrt(nb));
     }
 
     private CacheEntry parse(String s) {

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: recall
+description: AI hybrid search & RAG QA platform (backend + embedding sidecar)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
