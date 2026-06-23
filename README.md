@@ -1,5 +1,7 @@
 # Recall — AI Hybrid Search & RAG QA Platform
 
+![CI](https://github.com/jinwovo/recall/actions/workflows/ci.yml/badge.svg)
+
 > Hybrid (BM25 + dense vector) search and grounded RAG question-answering over a
 > technical knowledge base — built as a **backend engineering problem**, not a
 > thin LLM wrapper. The hard parts are retrieval quality, latency budgets, LLM
@@ -141,9 +143,11 @@ Scaffold + core paths implemented; being built toward the milestones in
 - Enable the Testcontainers idempotency IT in CI; eval regression gate
 - Helm chart for k8s
 
-> Honest note: the scaffold is written to compile and run, but has not yet been
-> built/executed end-to-end on the author's machine. Run `gradle wrapper` in
-> `backend/` first to generate the Gradle wrapper.
+> Status note: the backend compiles and unit tests pass in CI, the frontend builds,
+> and the sidecar passes syntax checks (see the Actions tab). A full end-to-end run
+> against the live infra (ES / Kafka / Redis / Postgres / sidecar) hasn't been
+> recorded yet. For local backend runs, generate the Gradle wrapper once with
+> `gradle wrapper` in `backend/`.
 
 ## License
 
