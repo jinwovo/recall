@@ -41,6 +41,16 @@ component inside a system with real engineering constraints:
 
 ---
 
+## Demo
+
+Hybrid search over the sample corpus — live Next.js UI → backend → Elasticsearch + bge-m3
+(captured with [`frontend/screenshot.mjs`](frontend/screenshot.mjs)):
+
+![Recall search UI](docs/screenshots/search.png)
+
+> The left **Answer** panel streams a grounded, cited RAG response when an
+> `ANTHROPIC_API_KEY` is configured; the shot above shows the retrieval / sources view.
+
 ## Architecture
 
 ```
