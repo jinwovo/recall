@@ -1,0 +1,3 @@
+{"query": "How do I expose Prometheus metrics in Spring Boot?", "relevant_doc_ids": ["spring-actuator"]}
+{"query": "쿠버네티스 파드가 계속 재시작될 때 원인 확인 방법", "relevant_doc_ids": ["k8s-pod-troubleshooting"]}
+{"query": "S3 bucket policy for read-only public access", "relevant_doc_ids": ["aws-s3-bucket-policy"]}

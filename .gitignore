@@ -1,0 +1,55 @@
+# ---- secrets / env ----
+.env
+.env.local
+*.local
+
+# ---- Java / Gradle ----
+backend/.gradle/
+backend/build/
+backend/bin/
+backend/out/
+.gradle/
+build/
+*.class
+
+# ---- Node / Next.js ----
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.turbo/
+node_modules/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---- Python (embedding sidecar / eval) ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+embedding-service/.venv/
+eval/.venv/
+.pytest_cache/
+.ruff_cache/
+
+# ---- model weights / data ----
+models/
+*.safetensors
+*.bin
+*.gguf
+data/raw/
+data/index/
+
+# ---- IDE / OS ----
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# ---- Claude Code local settings ----
+.claude/settings.local.json
+
+# ---- docker / runtime volumes ----
+.volumes/
+*.log

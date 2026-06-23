@@ -1,0 +1,5 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+FlagEmbedding==1.3.4
+# FlagEmbedding pulls torch + transformers. For GPU, install a CUDA torch build instead.

@@ -1,0 +1,126 @@
+# Recall — local development stack.
+#   docker compose up -d
+# Backend & frontend can run in-compose or on the host (gradle bootRun / npm run dev).
+name: recall
+
+services:
+  elasticsearch:
+    build: ./infra/elasticsearch        # official ES + analysis-nori plugin
+    container_name: recall-es
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+    ports: ["9200:9200"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    volumes: ["es-data:/usr/share/elasticsearch/data"]
+
+  redis:
+    image: redis:7-alpine
+    container_name: recall-redis
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: recall-postgres
+    environment:
+      POSTGRES_DB: recall
+      POSTGRES_USER: recall
+      POSTGRES_PASSWORD: recall
+    ports: ["5432:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U recall"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    volumes: ["pg-data:/var/lib/postgresql/data"]
+
+  kafka:
+    image: apache/kafka:3.8.0
+    container_name: recall-kafka
+    ports: ["29092:29092"]            # host access via localhost:29092
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: INTERNAL://:9092,CONTROLLER://:9093,EXTERNAL://:29092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+  minio:
+    image: minio/minio:latest
+    container_name: recall-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports: ["9000:9000", "9001:9001"]
+    volumes: ["minio-data:/data"]
+
+  embedding-service:
+    build: ./embedding-service
+    container_name: recall-embedding
+    environment:
+      EMBEDDING_MODEL: BAAI/bge-m3
+      RERANKER_MODEL: BAAI/bge-reranker-v2-m3
+    ports: ["8000:8000"]
+    volumes: ["hf-cache:/root/.cache/huggingface"]   # cache model weights
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: recall-prometheus
+    ports: ["9090:9090"]
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: recall-grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+    ports: ["3001:3000"]
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on: [prometheus]
+
+  # Optional: run the backend in-compose. For dev, prefer `./gradlew bootRun` on the host.
+  backend:
+    build: ./backend
+    container_name: recall-backend
+    profiles: ["full"]               # `docker compose --profile full up`
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ES_HOST: http://elasticsearch:9200
+      REDIS_HOST: redis
+      POSTGRES_HOST: postgres
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      EMBEDDING_SERVICE_URL: http://embedding-service:8000
+      MINIO_ENDPOINT: http://minio:9000
+    ports: ["8080:8080"]
+    depends_on:
+      elasticsearch: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_started }
+
+volumes:
+  es-data:
+  pg-data:
+  minio-data:
+  hf-cache:

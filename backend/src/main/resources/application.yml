@@ -1,0 +1,62 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: recall
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:recall}
+    username: ${POSTGRES_USER:recall}
+    password: ${POSTGRES_PASSWORD:recall}
+  jpa:
+    hibernate:
+      ddl-auto: update          # dev only; use Flyway/Liquibase for prod
+    open-in-view: false
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:29092}
+    consumer:
+      group-id: recall-ingestion
+      auto-offset-reset: earliest
+    producer:
+      acks: all
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus, metrics
+  metrics:
+    tags:
+      application: recall
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        recall.retrieval.latency: true
+
+recall:
+  elasticsearch:
+    host: ${ES_HOST:http://localhost:9200}
+    index: ${ES_INDEX:recall-docs}
+  embedding:
+    service-url: ${EMBEDDING_SERVICE_URL:http://localhost:8000}
+    dim: ${EMBEDDING_DIM:1024}
+  kafka:
+    ingestion-topic: ${KAFKA_INGESTION_TOPIC:recall.ingestion}
+  semantic-cache:
+    threshold: ${SEMANTIC_CACHE_THRESHOLD:0.95}
+  retrieval:
+    candidates: 50            # fused candidates before rerank
+    top-k: 8                  # passed to the LLM as context
+    rrf-k: 60
+  models:                      # see docs/adr/0002 — model tiering
+    primary: ${RECALL_MODEL_DEFAULT:claude-opus-4-8}
+    balanced: ${RECALL_MODEL_BALANCED:claude-sonnet-4-6}
+    cheap: ${RECALL_MODEL_CHEAP:claude-haiku-4-5}
+
+logging:
+  level:
+    com.portfolio.recall: DEBUG
