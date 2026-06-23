@@ -4,6 +4,8 @@ server:
 spring:
   application:
     name: recall
+  elasticsearch:                         # used by Spring Boot's ES health indicator
+    uris: ${ES_HOST:http://localhost:9200}
   datasource:
     url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:recall}
     username: ${POSTGRES_USER:recall}

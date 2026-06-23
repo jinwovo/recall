@@ -22,7 +22,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: recall-redis
-    ports: ["6379:6379"]
+    # no host port — backend reaches it as redis:6379 on the compose network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -36,7 +36,7 @@ services:
       POSTGRES_DB: recall
       POSTGRES_USER: recall
       POSTGRES_PASSWORD: recall
-    ports: ["5432:5432"]
+    # no host port — backend reaches it as postgres:5432 on the compose network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U recall"]
       interval: 10s
@@ -107,12 +107,13 @@ services:
     environment:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       ES_HOST: http://elasticsearch:9200
+      SPRING_ELASTICSEARCH_URIS: http://elasticsearch:9200
       REDIS_HOST: redis
       POSTGRES_HOST: postgres
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       EMBEDDING_SERVICE_URL: http://embedding-service:8000
       MINIO_ENDPOINT: http://minio:9000
-    ports: ["8080:8080"]
+    ports: ["${BACKEND_PORT:-8080}:8080"]   # set BACKEND_PORT (e.g. 18080) if host 8080 is taken
     depends_on:
       elasticsearch: { condition: service_healthy }
       redis: { condition: service_healthy }

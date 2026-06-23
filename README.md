@@ -99,6 +99,24 @@ model, semantic-cache hits, retrieval p95 by mode, and ingestion throughput.
 | Prometheus | http://localhost:9090 |
 | MinIO console | http://localhost:9001 |
 
+## Measured results
+
+Measured end-to-end on the running stack (Docker Compose) over a **24-document**
+technical corpus with a **10-query** gold set (exact-term, paraphrased, and Korean
+cross-lingual), via [`eval/run_eval.py`](eval/run_eval.py) against `eval/corpus.jsonl`
++ `eval/gold.jsonl`:
+
+| mode | Recall@5 | Recall@10 | MRR@10 | nDCG@10 |
+|------|:---:|:---:|:---:|:---:|
+| BM25-only   | 0.70 | 0.80 | 0.67 | 0.70 |
+| vector-only | 1.00 | 1.00 | 0.90 | 0.93 |
+| **hybrid (RRF + rerank)** | **1.00** | **1.00** | **0.95** | **0.96** |
+
+Hybrid lifts **Recall@5 by +0.30 over BM25** and MRR@10 from 0.67 → **0.95**: exact-term
+queries favor BM25, paraphrased/Korean queries favor dense vectors, and RRF + the
+cross-encoder reranker combine both. Reproduce: `docker compose up -d` → ingest
+`eval/corpus.jsonl` → `python eval/run_eval.py eval/gold.jsonl`.
+
 ## Target metrics
 
 - **Retrieval:** Recall@10 / MRR@10 / nDCG@10 — hybrid vs BM25-only vs vector-only.
@@ -144,11 +162,11 @@ Scaffold + core paths implemented; being built toward the milestones in
 - MinIO raw-doc storage on the ingestion path; dead-letter + retry
 - Enable the Testcontainers idempotency IT in CI; eval regression gate
 
-> Status note: the backend compiles and unit tests pass in CI, the frontend builds,
-> and the sidecar passes syntax checks (see the Actions tab). A full end-to-end run
-> against the live infra (ES / Kafka / Redis / Postgres / sidecar) hasn't been
-> recorded yet. For local backend runs, generate the Gradle wrapper once with
-> `gradle wrapper` in `backend/`.
+> Status note: verified end-to-end on Docker Compose — the full stack (ES+Nori,
+> Redis, Postgres, Kafka, embedding sidecar, backend) runs and the eval harness
+> produces the measured results above. Backend unit tests, frontend build, sidecar
+> syntax check, and `helm lint` pass in CI. For host-only backend runs, generate the
+> Gradle wrapper once with `gradle wrapper` in `backend/`.
 
 ## License
 

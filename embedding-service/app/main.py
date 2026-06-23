@@ -22,10 +22,12 @@ _models: dict = {}
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    import torch
     from FlagEmbedding import BGEM3FlagModel, FlagReranker
 
-    _models["embed"] = BGEM3FlagModel(EMBEDDING_MODEL, use_fp16=True)
-    _models["rerank"] = FlagReranker(RERANKER_MODEL, use_fp16=True)
+    use_fp16 = torch.cuda.is_available()  # fp16 helps on GPU; keep fp32 on CPU
+    _models["embed"] = BGEM3FlagModel(EMBEDDING_MODEL, use_fp16=use_fp16)
+    _models["rerank"] = FlagReranker(RERANKER_MODEL, use_fp16=use_fp16)
     yield
     _models.clear()
 

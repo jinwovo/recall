@@ -1,0 +1,10 @@
+{"query":"메시지가 재시도 때문에 중복 저장되는 걸 막으려면 어떻게 하나요?","relevant_doc_ids":["kafka-idempotent-producer"]}
+{"query":"max.poll.interval.ms cooperative sticky assignor rebalance","relevant_doc_ids":["kafka-rebalance"]}
+{"query":"how do I keep cached data after the server restarts","relevant_doc_ids":["redis-persistence"]}
+{"query":"allkeys-lru maxmemory-policy eviction","relevant_doc_ids":["redis-eviction"]}
+{"query":"find the most similar items to a query embedding quickly","relevant_doc_ids":["es-knn-vector"]}
+{"query":"CrashLoopBackOff kubectl logs --previous","relevant_doc_ids":["k8s-crashloop"]}
+{"query":"컨테이너가 메모리 제한을 초과해서 종료됐어요","relevant_doc_ids":["k8s-oomkilled"]}
+{"query":"download a file from S3 without making the bucket public","relevant_doc_ids":["aws-s3-presigned"]}
+{"query":"OutOfMemoryError Java heap space heap dump","relevant_doc_ids":["jvm-oom-heap"]}
+{"query":"reduce garbage collection pause times","relevant_doc_ids":["jvm-gc-g1"]}
