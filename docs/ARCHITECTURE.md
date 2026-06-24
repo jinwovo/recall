@@ -28,7 +28,7 @@ flowchart LR
     F -->|6 top-K context| P[7 prompt assembly + cache]
     P --> L[8 LLM provider<br/>Claude · Groq · Ollama]
     L -->|9 groundedness floor| Q
-    L ==>|SSE: tokens + citations| Q
+    L ==>|SSE tokens + citations| Q
 ```
 
 1. (optional) rewrite/classify the query with the cheap model tier.

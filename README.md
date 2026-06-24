@@ -43,7 +43,7 @@ flowchart LR
     BFF -->|BM25 + kNN| ES[(Elasticsearch<br/>Nori + dense_vector)]
     ES --> FUSE[RRF fuse + rerank]
     SIDE --> FUSE
-    FUSE -->|top-K context| RAG[RAG: assemble prompt]
+    FUSE -->|top-K context| RAG[assemble prompt]
     RAG --> LLM[LLM provider<br/>Claude · Groq · Ollama]
     RAG -.lookup / store.-> REDIS[(Redis<br/>semantic cache)]
     LLM ==>|SSE tokens + citations| Q
