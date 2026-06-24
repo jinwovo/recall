@@ -58,6 +58,14 @@ recall:
     primary: ${RECALL_MODEL_DEFAULT:claude-opus-4-8}
     balanced: ${RECALL_MODEL_BALANCED:claude-sonnet-4-6}
     cheap: ${RECALL_MODEL_CHEAP:claude-haiku-4-5}
+  llm:                         # provider toggle: claude (default) | groq (free)
+    provider: ${LLM_PROVIDER:claude}
+    groq:
+      base-url: ${GROQ_BASE_URL:https://api.groq.com/openai/v1}
+      model: ${GROQ_MODEL:meta-llama/llama-4-scout-17b-16e-instruct}
+    ollama:
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434/v1}
+      model: ${OLLAMA_MODEL:qwen2.5-coder:3b}
 
 logging:
   level:

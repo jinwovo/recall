@@ -11,6 +11,7 @@ import com.anthropic.models.messages.TextBlockParam;
 import com.portfolio.recall.config.RecallProperties;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.List;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.scheduler.Schedulers;
@@ -27,7 +28,8 @@ import reactor.core.scheduler.Schedulers;
  * </ul>
  */
 @Component
-public class ClaudeClient {
+@ConditionalOnProperty(name = "recall.llm.provider", havingValue = "claude", matchIfMissing = true)
+public class ClaudeClient implements LlmClient {
 
     private final AnthropicClient client;
     private final RecallProperties props;

@@ -105,7 +105,12 @@ services:
     container_name: recall-backend
     profiles: ["full"]               # `docker compose --profile full up`
     environment:
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      LLM_PROVIDER: ${LLM_PROVIDER:-claude}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-meta-llama/llama-4-scout-17b-16e-instruct}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434/v1}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5-coder:3b}
       ES_HOST: http://elasticsearch:9200
       SPRING_ELASTICSEARCH_URIS: http://elasticsearch:9200
       REDIS_HOST: redis

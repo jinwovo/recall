@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.portfolio.recall.cache.SemanticCacheService;
 import com.portfolio.recall.config.RecallProperties;
 import com.portfolio.recall.embedding.EmbeddingClient;
-import com.portfolio.recall.llm.ClaudeClient;
+import com.portfolio.recall.llm.LlmClient;
 import com.portfolio.recall.llm.ModelTier;
 import com.portfolio.recall.persistence.QueryLogService;
 import com.portfolio.recall.search.RetrievedChunk;
@@ -36,18 +36,18 @@ public class RagService {
     private final SearchService search;
     private final EmbeddingClient embeddings;
     private final SemanticCacheService cache;
-    private final ClaudeClient claude;
+    private final LlmClient llm;
     private final QueryLogService queryLog;
     private final ObjectMapper json;
     private final int topK;
 
     public RagService(SearchService search, EmbeddingClient embeddings, SemanticCacheService cache,
-                      ClaudeClient claude, QueryLogService queryLog, ObjectMapper json,
+                      LlmClient llm, QueryLogService queryLog, ObjectMapper json,
                       RecallProperties props) {
         this.search = search;
         this.embeddings = embeddings;
         this.cache = cache;
-        this.claude = claude;
+        this.llm = llm;
         this.queryLog = queryLog;
         this.json = json;
         this.topK = props.retrieval().topK();
@@ -65,7 +65,7 @@ public class RagService {
     }
 
     private Flux<ServerSentEvent<String>> cached(String query, String answer, long start) {
-        Flux<ServerSentEvent<String>> head = Flux.just(sse("cache", "hit"), sse("token", answer));
+        Flux<ServerSentEvent<String>> head = Flux.just(sse("cache", "hit"), sse("token", toJson(answer)));
         Flux<ServerSentEvent<String>> tail = Flux.defer(() ->
                 queryLog.record(query, "ask", true, 0, answer.length(), elapsedMs(start))
                         .thenMany(Flux.just(sse("done", ""))));
@@ -81,7 +81,7 @@ public class RagService {
             // Groundedness guard: no context → don't call the LLM, return the canned "I don't know".
             if (chunks.isEmpty()) {
                 return Flux.concat(
-                        Flux.just(sse("sources", "[]"), sse("token", IDK)),
+                        Flux.just(sse("sources", "[]"), sse("token", toJson(IDK))),
                         Flux.defer(() -> queryLog.record(query, "ask", false, 0, IDK.length(), elapsedMs(start))
                                 .thenMany(Flux.just(sse("done", "")))));
             }
@@ -90,10 +90,10 @@ public class RagService {
             StringBuilder answer = new StringBuilder();
 
             Flux<ServerSentEvent<String>> sources = Flux.just(sse("sources", toJson(chunks)));
-            Flux<ServerSentEvent<String>> tokens = claude
+            Flux<ServerSentEvent<String>> tokens = llm
                     .streamAnswer(SYSTEM_PROMPT, prompt, ModelTier.PRIMARY)
                     .doOnNext(answer::append)
-                    .map(t -> sse("token", t));
+                    .map(t -> sse("token", toJson(t)));
             // TODO: post-hoc LLM-judge groundedness check; switch [n] citations → Claude native citations.
             Flux<ServerSentEvent<String>> done = Flux.defer(() ->
                     cache.put(vector, answer.toString(), query)

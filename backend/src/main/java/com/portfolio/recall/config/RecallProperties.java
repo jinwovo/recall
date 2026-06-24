@@ -10,7 +10,8 @@ public record RecallProperties(
         Kafka kafka,
         SemanticCache semanticCache,
         Retrieval retrieval,
-        Models models) {
+        Models models,
+        Llm llm) {
 
     public record Elasticsearch(String host, String index) {}
 
@@ -25,4 +26,11 @@ public record RecallProperties(
 
     /** Model tiering (docs/adr/0002). 'primary' avoids the Java reserved word 'default'. */
     public record Models(String primary, String balanced, String cheap) {}
+
+    /** LLM provider selection: claude (default) or groq (free, OpenAI-compatible). */
+    public record Llm(String provider, Groq groq, Ollama ollama) {
+        public record Groq(String baseUrl, String model) {}
+
+        public record Ollama(String baseUrl, String model) {}
+    }
 }

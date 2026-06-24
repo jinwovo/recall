@@ -47,7 +47,7 @@ export default function Home() {
 
     es.addEventListener("sources", (e) => setSources(JSON.parse((e as MessageEvent).data)));
     es.addEventListener("cache", () => setCached(true));
-    es.addEventListener("token", (e) => setAnswer((a) => a + (e as MessageEvent).data));
+    es.addEventListener("token", (e) => setAnswer((a) => a + JSON.parse((e as MessageEvent).data)));
     es.addEventListener("done", () => {
       setStreaming(false);
       es.close();
