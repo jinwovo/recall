@@ -58,4 +58,9 @@ dependencies {
     testImplementation("org.testcontainers:postgresql")
 }
 
-tasks.withType<Test> { useJUnitPlatform() }
+tasks.withType<Test> {
+    useJUnitPlatform()
+    // Print per-test outcomes so a silently-skipped integration test (e.g. Docker
+    // detection failure) is visible in CI logs instead of passing as green.
+    testLogging { events("passed", "skipped", "failed") }
+}
