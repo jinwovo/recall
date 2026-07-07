@@ -20,6 +20,10 @@ val elasticsearchClientVersion: String by project
 val minioVersion: String by project
 val testcontainersVersion: String by project
 
+// Spring Boot's dependency management pins testcontainers (1.20.x on Boot 3.4); override the
+// managed version — 1.21+ is required to talk to Docker Engine 29 daemons.
+extra["testcontainers.version"] = testcontainersVersion
+
 dependencies {
     // Web (WebFlux for clean SSE streaming) + actuator/metrics
     implementation("org.springframework.boot:spring-boot-starter-webflux")

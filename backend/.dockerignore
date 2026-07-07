@@ -1,0 +1,4 @@
+# Keep host-side build state out of the image build context — it is large, stale,
+# and gradle daemons hold file locks on it (breaks `docker compose build` mid-test).
+.gradle/
+build/
