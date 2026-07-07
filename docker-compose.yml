@@ -111,6 +111,8 @@ services:
       GROQ_MODEL: ${GROQ_MODEL:-meta-llama/llama-4-scout-17b-16e-instruct}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434/v1}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5-coder:3b}
+      RAG_JUDGE_ENABLED: ${RAG_JUDGE_ENABLED:-true}
+      RAG_JUDGE_TIMEOUT_SECONDS: ${RAG_JUDGE_TIMEOUT_SECONDS:-45}
       ES_HOST: http://elasticsearch:9200
       SPRING_ELASTICSEARCH_URIS: http://elasticsearch:9200
       REDIS_HOST: redis

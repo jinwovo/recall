@@ -10,14 +10,18 @@ import com.portfolio.recall.persistence.QueryLogService;
 import com.portfolio.recall.search.RetrievedChunk;
 import com.portfolio.recall.search.SearchService;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 /**
- * RAG QA (docs/adr/0001, 0002): retrieve → assemble grounded prompt → stream answer over SSE,
- * with a semantic-cache short-circuit and a per-question query log.
- * SSE event types: {@code sources}, {@code token}, {@code cache}, {@code done}, {@code error}.
+ * RAG QA (docs/adr/0001, 0002, 0004): retrieve → assemble grounded prompt → stream answer over
+ * SSE, then grade the finished answer with a post-hoc groundedness judge. Semantic-cache
+ * short-circuit and a per-question query log included.
+ * SSE event types: {@code sources}, {@code token}, {@code cache}, {@code judging},
+ * {@code groundedness}, {@code done}, {@code error}.
  */
 @Service
 public class RagService {
@@ -37,17 +41,19 @@ public class RagService {
     private final EmbeddingClient embeddings;
     private final SemanticCacheService cache;
     private final LlmClient llm;
+    private final GroundednessJudge judge;
     private final QueryLogService queryLog;
     private final ObjectMapper json;
     private final int topK;
 
     public RagService(SearchService search, EmbeddingClient embeddings, SemanticCacheService cache,
-                      LlmClient llm, QueryLogService queryLog, ObjectMapper json,
-                      RecallProperties props) {
+                      LlmClient llm, GroundednessJudge judge, QueryLogService queryLog,
+                      ObjectMapper json, RecallProperties props) {
         this.search = search;
         this.embeddings = embeddings;
         this.cache = cache;
         this.llm = llm;
+        this.judge = judge;
         this.queryLog = queryLog;
         this.json = json;
         this.topK = props.retrieval().topK();
@@ -67,7 +73,7 @@ public class RagService {
     private Flux<ServerSentEvent<String>> cached(String query, String answer, long start) {
         Flux<ServerSentEvent<String>> head = Flux.just(sse("cache", "hit"), sse("token", toJson(answer)));
         Flux<ServerSentEvent<String>> tail = Flux.defer(() ->
-                queryLog.record(query, "ask", true, 0, answer.length(), elapsedMs(start))
+                queryLog.record(query, "ask", true, 0, answer.length(), elapsedMs(start), null)
                         .thenMany(Flux.just(sse("done", ""))));
         return Flux.concat(head, tail);
     }
@@ -82,7 +88,7 @@ public class RagService {
             if (chunks.isEmpty()) {
                 return Flux.concat(
                         Flux.just(sse("sources", "[]"), sse("token", toJson(IDK))),
-                        Flux.defer(() -> queryLog.record(query, "ask", false, 0, IDK.length(), elapsedMs(start))
+                        Flux.defer(() -> queryLog.record(query, "ask", false, 0, IDK.length(), elapsedMs(start), null)
                                 .thenMany(Flux.just(sse("done", "")))));
             }
 
@@ -94,15 +100,41 @@ public class RagService {
                     .streamAnswer(SYSTEM_PROMPT, prompt, ModelTier.PRIMARY)
                     .doOnNext(answer::append)
                     .map(t -> sse("token", toJson(t)));
-            // TODO: post-hoc LLM-judge groundedness check; switch [n] citations → Claude native citations.
-            Flux<ServerSentEvent<String>> done = Flux.defer(() ->
-                    cache.put(vector, answer.toString(), query)
-                            .then(queryLog.record(query, "ask", false, chunks.size(),
-                                    answer.length(), elapsedMs(start)))
-                            .thenMany(Flux.just(sse("done", ""))));
+            // TODO: switch [n] citations → Claude native citations (claude provider + paid key).
+            Flux<ServerSentEvent<String>> tail = Flux.defer(() -> judged(query, vector, chunks, answer.toString(), start));
 
-            return Flux.concat(sources, tokens, done);
+            return Flux.concat(sources, tokens, tail);
         });
+    }
+
+    /**
+     * Post-answer tail (docs/adr/0004): grade groundedness (fail-open), then persist
+     * cache/log and close the stream. Abstentions ("I don't know") are not judged —
+     * declining to answer is the guardrail working, not a hallucination.
+     */
+    private Flux<ServerSentEvent<String>> judged(String query, float[] vector,
+                                                 List<RetrievedChunk> chunks, String answer, long start) {
+        boolean judgeable = judge.enabled() && !answer.contains(IDK);
+        Mono<Optional<Judgment>> judgment = judgeable
+                ? judge.judge(query, chunks, answer)
+                : Mono.just(Optional.empty());
+
+        Flux<ServerSentEvent<String>> judging = judgeable ? Flux.just(sse("judging", "")) : Flux.empty();
+        Flux<ServerSentEvent<String>> rest = judgment.flatMapMany(j -> {
+            // Never cache a judged-unsupported answer or an abstention — a semantic-cache hit
+            // replays the answer verbatim and skips re-judging, making a hallucination (or a
+            // sampling-artifact "I don't know") sticky across near-duplicate questions.
+            boolean cacheable = !answer.contains(IDK)
+                    && j.map(v -> v.verdict() != Judgment.Verdict.UNSUPPORTED).orElse(true);
+            return Flux.concat(
+                    j.map(v -> Flux.just(sse("groundedness", toJson(v)))).orElseGet(Flux::empty),
+                    (cacheable ? cache.put(vector, answer, query) : Mono.<Void>empty())
+                            .then(queryLog.record(query, "ask", false, chunks.size(), answer.length(),
+                                    elapsedMs(start), j.map(Judgment::score).orElse(null)))
+                            .thenMany(Flux.just(sse("done", ""))));
+        });
+
+        return Flux.concat(judging, rest);
     }
 
     private static long elapsedMs(long startNanos) {
