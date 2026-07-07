@@ -86,6 +86,36 @@
           "legendFormat": "{{uri}}"
         }
       ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Groundedness verdicts/sec (LLM judge)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (verdict) (rate(recall_rag_judge_verdicts_total[5m]))",
+          "legendFormat": "{{verdict}}"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Groundedness (avg judge score, 1h)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(recall_rag_groundedness_sum[1h])) / sum(increase(recall_rag_groundedness_count[1h]))",
+          "legendFormat": "groundedness"
+        }
+      ]
     }
   ]
 }

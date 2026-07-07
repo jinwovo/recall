@@ -58,6 +58,10 @@ recall:
     primary: ${RECALL_MODEL_DEFAULT:claude-opus-4-8}
     balanced: ${RECALL_MODEL_BALANCED:claude-sonnet-4-6}
     cheap: ${RECALL_MODEL_CHEAP:claude-haiku-4-5}
+  rag:
+    judge:                     # post-hoc groundedness judge (docs/adr/0004) — fail-open
+      enabled: ${RAG_JUDGE_ENABLED:true}
+      timeout-seconds: ${RAG_JUDGE_TIMEOUT_SECONDS:45}
   llm:                         # provider toggle: claude (default) | groq (free)
     provider: ${LLM_PROVIDER:claude}
     groq:

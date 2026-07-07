@@ -25,18 +25,23 @@ public class QueryLog {
     private int sourceCount;
     private int answerChars;
     private long latencyMs;
+
+    /** Post-hoc judge score 1.0/0.5/0.0 (docs/adr/0004); null = not judged (cache hit, abstention, judge off/failed). */
+    private Double groundedness;
+
     private Instant createdAt = Instant.now();
 
     protected QueryLog() {}
 
     public QueryLog(String query, String mode, boolean cacheHit, int sourceCount,
-                    int answerChars, long latencyMs) {
+                    int answerChars, long latencyMs, Double groundedness) {
         this.query = query;
         this.mode = mode;
         this.cacheHit = cacheHit;
         this.sourceCount = sourceCount;
         this.answerChars = answerChars;
         this.latencyMs = latencyMs;
+        this.groundedness = groundedness;
     }
 
     public Long getId() {

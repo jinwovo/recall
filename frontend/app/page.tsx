@@ -14,12 +14,22 @@ type Chunk = {
   score: number;
 };
 
+type Groundedness = { verdict: "SUPPORTED" | "PARTIAL" | "UNSUPPORTED"; score: number };
+
+const GROUNDEDNESS_BADGE: Record<Groundedness["verdict"], { label: string; className: string }> = {
+  SUPPORTED: { label: "grounded", className: "bg-green-100 text-green-700" },
+  PARTIAL: { label: "partially grounded", className: "bg-amber-100 text-amber-700" },
+  UNSUPPORTED: { label: "unsupported", className: "bg-red-100 text-red-700" },
+};
+
 export default function Home() {
   const [query, setQuery] = useState("");
   const [answer, setAnswer] = useState("");
   const [sources, setSources] = useState<Chunk[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [cached, setCached] = useState(false);
+  const [judging, setJudging] = useState(false);
+  const [grounded, setGrounded] = useState<Groundedness | null>(null);
   const [highlight, setHighlight] = useState<number | null>(null);
   const esRef = useRef<EventSource | null>(null);
 
@@ -28,6 +38,8 @@ export default function Home() {
     setAnswer("");
     setSources([]);
     setCached(false);
+    setJudging(false);
+    setGrounded(null);
     setHighlight(null);
   }
 
@@ -48,12 +60,19 @@ export default function Home() {
     es.addEventListener("sources", (e) => setSources(JSON.parse((e as MessageEvent).data)));
     es.addEventListener("cache", () => setCached(true));
     es.addEventListener("token", (e) => setAnswer((a) => a + JSON.parse((e as MessageEvent).data)));
+    es.addEventListener("judging", () => setJudging(true));
+    es.addEventListener("groundedness", (e) => {
+      setJudging(false);
+      setGrounded(JSON.parse((e as MessageEvent).data));
+    });
     es.addEventListener("done", () => {
       setStreaming(false);
+      setJudging(false);
       es.close();
     });
     es.addEventListener("error", () => {
       setStreaming(false);
+      setJudging(false);
       es.close();
     });
   }
@@ -111,6 +130,12 @@ export default function Home() {
           <h2 className="mb-2 text-sm font-medium text-gray-500">
             Answer {streaming && <span className="text-accent">● streaming</span>}
             {cached && <span className="ml-2 rounded bg-accent-soft px-2 text-xs text-accent">cache hit</span>}
+            {judging && <span className="ml-2 text-xs text-gray-400">checking answer against sources…</span>}
+            {grounded && (
+              <span className={`ml-2 rounded px-2 text-xs ${GROUNDEDNESS_BADGE[grounded.verdict].className}`}>
+                {GROUNDEDNESS_BADGE[grounded.verdict].label}
+              </span>
+            )}
           </h2>
           <p className="whitespace-pre-wrap text-[15px] leading-relaxed">
             {answer ? renderAnswer(answer) : <span className="text-gray-400">Ask a question to get a grounded, cited answer.</span>}

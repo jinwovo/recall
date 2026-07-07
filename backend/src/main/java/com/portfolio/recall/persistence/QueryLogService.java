@@ -22,9 +22,9 @@ public class QueryLogService {
     }
 
     public Mono<Void> record(String query, String mode, boolean cacheHit,
-                             int sourceCount, int answerChars, long latencyMs) {
+                             int sourceCount, int answerChars, long latencyMs, Double groundedness) {
         return Mono.fromRunnable(() ->
-                        repo.save(new QueryLog(query, mode, cacheHit, sourceCount, answerChars, latencyMs)))
+                        repo.save(new QueryLog(query, mode, cacheHit, sourceCount, answerChars, latencyMs, groundedness)))
                 .subscribeOn(Schedulers.boundedElastic())
                 .then()
                 .onErrorResume(e -> {

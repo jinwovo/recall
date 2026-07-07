@@ -11,7 +11,8 @@ public record RecallProperties(
         SemanticCache semanticCache,
         Retrieval retrieval,
         Models models,
-        Llm llm) {
+        Llm llm,
+        Rag rag) {
 
     public record Elasticsearch(String host, String index) {}
 
@@ -32,5 +33,11 @@ public record RecallProperties(
         public record Groq(String baseUrl, String model) {}
 
         public record Ollama(String baseUrl, String model) {}
+    }
+
+    /** RAG answer-quality guardrails (docs/adr/0004). */
+    public record Rag(Judge judge) {
+        /** Post-hoc groundedness judge: fail-open, bounded by timeoutSeconds. */
+        public record Judge(boolean enabled, int timeoutSeconds) {}
     }
 }
