@@ -12,13 +12,16 @@ public record RecallProperties(
         Retrieval retrieval,
         Models models,
         Llm llm,
-        Rag rag) {
+        Rag rag,
+        Storage storage) {
 
     public record Elasticsearch(String host, String index) {}
 
     public record Embedding(String serviceUrl, int dim) {}
 
-    public record Kafka(String ingestionTopic) {}
+    /** Ingestion topic + failure policy: bounded exponential retries, then dead-letter (docs/adr/0005). */
+    public record Kafka(String ingestionTopic, String ingestionDlqTopic,
+                        int retryMaxAttempts, long retryBackoffMs) {}
 
     public record SemanticCache(double threshold) {}
 
@@ -40,4 +43,12 @@ public record RecallProperties(
         /** Post-hoc groundedness judge: fail-open, bounded by timeoutSeconds. */
         public record Judge(boolean enabled, int timeoutSeconds) {}
     }
+
+    /**
+     * Raw-document archive (MinIO/S3). Documents larger than inlineMaxBytes travel through
+     * Kafka as an objectKey reference instead of inline content — the claim-check pattern
+     * (docs/adr/0005).
+     */
+    public record Storage(String endpoint, String accessKey, String secretKey,
+                          String bucket, int inlineMaxBytes) {}
 }

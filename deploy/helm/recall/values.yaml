@@ -33,10 +33,15 @@ config:
   postgresDb: recall
   postgresUser: recall
   kafkaBootstrap: kafka:9092
+  kafkaIngestionDlqTopic: recall.ingestion.dlq
+  minioEndpoint: http://minio:9000
+  minioBucket: recall-raw
 
 # Secret with sensitive values — create separately, e.g.:
 #   kubectl create secret generic recall-secrets \
 #     --from-literal=anthropic-api-key=sk-ant-... \
-#     --from-literal=postgres-password=...
+#     --from-literal=postgres-password=... \
+#     --from-literal=minio-access-key=... \
+#     --from-literal=minio-secret-key=...
 secret:
   name: recall-secrets

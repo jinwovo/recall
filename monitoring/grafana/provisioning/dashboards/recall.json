@@ -116,6 +116,36 @@
           "legendFormat": "groundedness"
         }
       ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Ingestion reliability (retries / DLQ / raw-archive failures)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(recall_ingestion_retries_total[5m])",
+          "legendFormat": "retries"
+        },
+        {
+          "refId": "B",
+          "expr": "rate(recall_ingestion_dlq_total[5m])",
+          "legendFormat": "dead-lettered"
+        },
+        {
+          "refId": "C",
+          "expr": "rate(recall_ingestion_raw_store_failures_total[5m])",
+          "legendFormat": "raw-archive failures (degraded to inline)"
+        },
+        {
+          "refId": "D",
+          "expr": "rate(recall_ingestion_dlq_publish_failures_total[5m])",
+          "legendFormat": "DLQ publish failures"
+        }
+      ]
     }
   ]
 }
