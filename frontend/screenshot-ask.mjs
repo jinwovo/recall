@@ -20,6 +20,12 @@ try {
 } catch {
   console.log("stream did not finish within timeout (continuing)");
 }
+// wait for the post-hoc judge verdict badge so the screenshot shows it
+try {
+  await page.waitForSelector('[data-testid="groundedness-badge"]', { timeout: 150000 });
+} catch {
+  console.log("no groundedness badge within timeout (continuing)");
+}
 await page.waitForTimeout(800);
 
 const chip = await page.$("button.align-super");

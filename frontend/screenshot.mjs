@@ -7,7 +7,7 @@ const QUERY = process.env.UI_QUERY || "find the most similar items to a query em
 const OUT = process.env.UI_OUT || "../docs/screenshots/search.png";
 
 const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+const page = await browser.newPage({ viewport: { width: 1280, height: 1450 } });
 page.on("console", (m) => console.log("[console]", m.type(), m.text()));
 page.on("pageerror", (e) => console.log("[pageerror]", e.message));
 page.on("requestfailed", (r) => console.log("[reqfailed]", r.url(), r.failure()?.errorText));
@@ -22,6 +22,6 @@ try {
   console.log("no #src-0 within timeout");
 }
 await page.waitForTimeout(1000);
-await page.screenshot({ path: OUT, fullPage: true });
+await page.screenshot({ path: OUT, fullPage: process.env.UI_FULLPAGE === "1" });
 console.log("saved", OUT);
 await browser.close();
