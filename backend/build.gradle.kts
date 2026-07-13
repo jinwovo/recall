@@ -56,6 +56,7 @@ dependencies {
     testImplementation("org.testcontainers:elasticsearch")
     testImplementation("org.testcontainers:kafka")
     testImplementation("org.testcontainers:postgresql")
+    testImplementation("org.testcontainers:minio")
 }
 
 tasks.withType<Test> {

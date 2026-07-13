@@ -67,7 +67,7 @@ class GroundednessJudgeTest {
 
     private GroundednessJudge judge(LlmClient llm, boolean enabled) {
         RecallProperties props = new RecallProperties(null, null, null, null, null, null, null,
-                new RecallProperties.Rag(new RecallProperties.Rag.Judge(enabled, 5)));
+                new RecallProperties.Rag(new RecallProperties.Rag.Judge(enabled, 5)), null);
         return new GroundednessJudge(llm, meters, props);
     }
 }

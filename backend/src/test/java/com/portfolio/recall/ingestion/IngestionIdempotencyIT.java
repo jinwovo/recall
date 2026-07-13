@@ -173,6 +173,6 @@ class IngestionIdempotencyIT {
         return new RecallProperties(
                 new RecallProperties.Elasticsearch("unused", indexName),
                 new RecallProperties.Embedding("unused", EMBEDDING_DIM),
-                null, null, null, null, null, null);
+                null, null, null, null, null, null, null);
     }
 }
