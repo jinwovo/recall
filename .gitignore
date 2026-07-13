@@ -53,3 +53,6 @@ Thumbs.db
 # ---- docker / runtime volumes ----
 .volumes/
 *.log
+
+# ---- demo recording scratch (GIF source videos) ----
+frontend/demo-video/
