@@ -46,18 +46,26 @@ flowchart LR
 ```mermaid
 flowchart LR
     U([upload / crawl]) --> BFF[BFF]
-    BFF --> MINIO[(MinIO<br/>raw docs)]
-    BFF -->|event| K[(Kafka)]
+    BFF -->|archive raw| MINIO[(MinIO<br/>raw docs)]
+    BFF -->|event, acks=all| K[(Kafka)]
     K --> W[ingest worker]
+    W -.claim check<br/>fetch by objectKey.-> MINIO
     W --> C[parse + chunk]
     C -->|batch enrich| B[Claude Batch API]
     C -->|embed| S[bge-m3 sidecar]
     W -->|idempotent upsert<br/>by content hash| ES[(Elasticsearch)]
+    W -->|poison pill or<br/>retries exhausted| DLQ[(dead-letter topic)]
 ```
 
 Idempotency: each chunk's ES `_id` is `sha256(docId + chunkIndex + content)`, so retries,
-duplicate events, and concurrent ingestion converge to the same index state — no duplicates,
-no loss. See [`adr/0003`](adr/0003-async-ingestion-kafka.md).
+duplicate events, and concurrent ingestion converge to the same index state — no duplicates.
+See [`adr/0003`](adr/0003-async-ingestion-kafka.md).
+
+No loss: a 202 from the API means the raw document is archived in MinIO and the event is
+broker-acked; documents above the inline threshold travel as `objectKey` references (claim
+check). Consumer failures retry with exponential backoff and dead-letter to
+`recall.ingestion.dlq` with forensic headers — poison pills skip retries. See
+[`adr/0005`](adr/0005-ingestion-reliability-dlq-claim-check.md).
 
 ## Elasticsearch mapping (sketch)
 
@@ -91,7 +99,8 @@ no loss. See [`adr/0003`](adr/0003-async-ingestion-kafka.md).
 
 - Micrometer → Prometheus → Grafana (dashboard provisioned under `monitoring/`).
 - Custom metrics: `recall_retrieval_latency` (by mode), `recall_llm_tokens_total{model,type}`,
-  `recall_semantic_cache_hits_total`, `recall_ingestion_docs_total`/`_chunks_total`.
+  `recall_semantic_cache_hits_total`, `recall_ingestion_docs_total`/`_chunks_total`,
+  `recall_ingestion_retries_total`/`_dlq_total`/`_raw_store_failures_total` (reliability, adr/0005).
 - Per-question rows persisted to Postgres (`query_log`): latency, cache hit, source count.
 
 ## Deployment

@@ -37,6 +37,16 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.secret.name }}
                   key: postgres-password
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secret.name }}
+                  key: minio-access-key
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secret.name }}
+                  key: minio-secret-key
           readinessProbe:
             httpGet:
               path: /actuator/health

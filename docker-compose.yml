@@ -120,6 +120,9 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       EMBEDDING_SERVICE_URL: http://embedding-service:8000
       MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: recall-raw
     ports: ["${BACKEND_PORT:-8080}:8080"]   # set BACKEND_PORT (e.g. 18080) if host 8080 is taken
     depends_on:
       elasticsearch: { condition: service_healthy }

@@ -1,11 +1,13 @@
 package com.portfolio.recall.ingestion;
 
-import org.springframework.http.HttpStatus;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 @RestController
 @RequestMapping("/api/ingest")
@@ -17,11 +19,17 @@ public class IngestionController {
         this.service = service;
     }
 
-    /** Accepts a document and returns 202 immediately; indexing happens async (docs/adr/0003). */
+    /**
+     * Accepts a document and returns 202; indexing happens async (docs/adr/0003). Enqueueing
+     * blocks on MinIO + the broker ack (docs/adr/0005), so it runs off the event loop.
+     */
     @PostMapping
-    public ResponseEntity<Ack> ingest(@RequestBody IngestionEvent event) {
-        service.enqueue(event);
-        return ResponseEntity.accepted().body(new Ack(event.docId(), "queued"));
+    public Mono<ResponseEntity<Ack>> ingest(@Valid @RequestBody IngestionEvent event) {
+        return Mono.fromCallable(() -> {
+                    service.enqueue(event);
+                    return ResponseEntity.accepted().body(new Ack(event.docId(), "queued"));
+                })
+                .subscribeOn(Schedulers.boundedElastic());
     }
 
     public record Ack(String docId, String status) {}

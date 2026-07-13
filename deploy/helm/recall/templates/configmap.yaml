@@ -14,4 +14,7 @@ data:
   POSTGRES_DB: {{ .Values.config.postgresDb | quote }}
   POSTGRES_USER: {{ .Values.config.postgresUser | quote }}
   KAFKA_BOOTSTRAP_SERVERS: {{ .Values.config.kafkaBootstrap | quote }}
+  KAFKA_INGESTION_DLQ_TOPIC: {{ .Values.config.kafkaIngestionDlqTopic | quote }}
+  MINIO_ENDPOINT: {{ .Values.config.minioEndpoint | quote }}
+  MINIO_BUCKET: {{ .Values.config.minioBucket | quote }}
   EMBEDDING_SERVICE_URL: {{ printf "http://%s-embedding:%v" (include "recall.fullname" .) .Values.embedding.port | quote }}
