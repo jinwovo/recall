@@ -8,6 +8,12 @@ all measured, not asserted.
 [![CI](https://github.com/jinwovo/recall/actions/workflows/ci.yml/badge.svg)](https://github.com/jinwovo/recall/actions/workflows/ci.yml)
 [![eval](https://github.com/jinwovo/recall/actions/workflows/eval.yml/badge.svg)](https://github.com/jinwovo/recall/actions/workflows/eval.yml)
 
+**Run it yourself in ~5 minutes** — `docker compose --profile full up`, then seed and ask.
+**No API key needed** (free local LLM via Ollama). Use it as a self-hosted hybrid-search /
+RAG starter for your own corpus — swap [`eval/corpus.jsonl`](eval/corpus.jsonl) for your
+documents — or read it as an engineering log: every design decision has an ADR, every
+quality claim has a measured number, and retrieval quality is a CI gate.
+
 > Status: active build. Verified end-to-end on Docker Compose — the full stack (Elasticsearch
 > with Nori, Redis, Postgres, Kafka, MinIO, embedding sidecar, backend) runs, and the RAG QA
 > path works with a free local LLM (Ollama). CI runs backend unit tests plus three Testcontainers
