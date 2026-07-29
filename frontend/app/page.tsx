@@ -386,6 +386,10 @@ export default function Home() {
           Grafana
         </a>
         <span>·</span>
+        <a className="transition hover:text-slate-300" href="/admin">
+          Ops
+        </a>
+        <span>·</span>
         <span>API {API}</span>
         <span className="ml-auto hidden font-mono text-[11px] sm:inline">
           BM25(Nori) + kNN(bge-m3) → RRF → rerank → LLM + judge
