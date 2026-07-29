@@ -36,15 +36,15 @@ import org.testcontainers.utility.DockerImageName;
  * The ES {@code _id} is {@link Hashing#chunkId} (same as {@link IngestionConsumer}), so N
  * identical upserts — including concurrent ones — converge to a single document.
  *
- * <p>Runs the same image recipe as production (ES 8.15 + analysis-nori, see
+ * <p>Runs the same image recipe as production (ES 8.18 + analysis-nori, see
  * infra/elasticsearch/Dockerfile) so {@link ElasticsearchDocumentIndex#ensureIndex()} is
  * exercised as-is, Korean analyzer included. Skipped automatically when Docker is unavailable.
  */
 @Tag("integration")
 class IngestionIdempotencyIT {
 
-    private static final String ES_BASE_IMAGE = "docker.elastic.co/elasticsearch/elasticsearch:8.15.0";
-    private static final int EMBEDDING_DIM = 8;
+    private static final String ES_BASE_IMAGE = "docker.elastic.co/elasticsearch/elasticsearch:8.18.2";
+    private static final int EMBEDDING_DIM = 64;   // >= 64 so the BBQ mapping path (adr/0009) is exercised
     private static final AtomicInteger INDEX_SEQ = new AtomicInteger();
 
     private static ElasticsearchContainer es;
@@ -59,7 +59,7 @@ class IngestionIdempotencyIT {
         assumeTrue(DockerClientFactory.instance().isDockerAvailable(), "Docker required for this IT");
 
         // Stock ES images ship without Nori — build the plugin in, mirroring infra/elasticsearch.
-        String noriImage = new ImageFromDockerfile("recall-es-nori-it:8.15.0", false)
+        String noriImage = new ImageFromDockerfile("recall-es-nori-it:8.18.2", false)
                 .withDockerfileFromBuilder(b -> b
                         .from(ES_BASE_IMAGE)
                         .run("bin/elasticsearch-plugin install --batch analysis-nori"))

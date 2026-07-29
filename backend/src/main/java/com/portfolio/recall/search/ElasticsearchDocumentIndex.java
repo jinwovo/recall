@@ -19,6 +19,11 @@ import org.springframework.stereotype.Component;
 @Component
 public class ElasticsearchDocumentIndex implements DocumentIndex {
 
+    /**
+     * {@code bbq_hnsw} stores 1-bit RaBitQ-quantized vectors in the HNSW graph (~32x less
+     * vector memory than float32); raw vectors stay on disk for rescoring. Recall retention
+     * is enforced by the eval gate (docs/adr/0009).
+     */
     private static final String MAPPING_TEMPLATE = """
             {
               "settings": { "analysis": { "analyzer": { "korean": { "type": "nori" } } } },
@@ -30,7 +35,8 @@ public class ElasticsearchDocumentIndex implements DocumentIndex {
                   "source":      { "type": "keyword" },
                   "lang":        { "type": "keyword" },
                   "contentHash": { "type": "keyword" },
-                  "embedding":   { "type": "dense_vector", "dims": __DIM__, "index": true, "similarity": "cosine" }
+                  "embedding":   { "type": "dense_vector", "dims": __DIM__, "index": true,
+                                   "similarity": "cosine"__INDEX_OPTIONS__ }
                 }
               }
             }
@@ -52,7 +58,13 @@ public class ElasticsearchDocumentIndex implements DocumentIndex {
             if (es.indices().exists(e -> e.index(index)).value()) {
                 return;
             }
-            String json = MAPPING_TEMPLATE.replace("__DIM__", Integer.toString(dim));
+            // BBQ requires dims >= 64; smaller dims (tests, toy configs) keep plain float HNSW.
+            String indexOptions = dim >= 64
+                    ? ", \"index_options\": { \"type\": \"bbq_hnsw\" }"
+                    : "";
+            String json = MAPPING_TEMPLATE
+                    .replace("__DIM__", Integer.toString(dim))
+                    .replace("__INDEX_OPTIONS__", indexOptions);
             es.indices().create(c -> c.index(index).withJson(new StringReader(json)));
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to ensure ES index " + index, e);
@@ -85,7 +97,10 @@ public class ElasticsearchDocumentIndex implements DocumentIndex {
                             .field("embedding")
                             .queryVector(qv)
                             .k(size)
-                            .numCandidates(Math.max(size * 4, 100))), ChunkSource.class);
+                            .numCandidates(Math.max(size * 4, 100))
+                            // Quantized HNSW walks more candidates cheaply; rescore the top
+                            // oversampled set against the raw float vectors (docs/adr/0009).
+                            .rescoreVector(rv -> rv.oversample(3.0F))), ChunkSource.class);
             return toChunks(resp);
         } catch (IOException e) {
             throw new UncheckedIOException("kNN search failed", e);
