@@ -54,6 +54,7 @@ export default function Home() {
   const [searching, setSearching] = useState(false);
   const [cached, setCached] = useState(false);
   const [grounded, setGrounded] = useState<Groundedness | null>(null);
+  const [insufficient, setInsufficient] = useState(false);
   const [highlight, setHighlight] = useState<number | null>(null);
   const [stage, setStage] = useState<Stage>("idle");
   const [searchMeta, setSearchMeta] = useState<{ ms: number; mode: Mode; count: number } | null>(null);
@@ -68,6 +69,7 @@ export default function Home() {
     setSources([]);
     setCached(false);
     setGrounded(null);
+    setInsufficient(false);
     setHighlight(null);
     setStage("idle");
     setSearchMeta(null);
@@ -112,6 +114,7 @@ export default function Home() {
       setStage("generating");
     });
     es.addEventListener("cache", () => setCached(true));
+    es.addEventListener("sufficiency", () => setInsufficient(true));
     es.addEventListener("token", (e) => {
       if (!sawToken) {
         sawToken = true;
@@ -281,6 +284,14 @@ export default function Home() {
             )}
             {stage === "verifying" && (
               <span className="text-[11px] text-slate-500">LLM judge checking answer against sources…</span>
+            )}
+            {insufficient && (
+              <span
+                data-testid="sufficiency-badge"
+                className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] text-amber-300 ring-1 ring-amber-400/30"
+              >
+                insufficient context — abstained
+              </span>
             )}
             {grounded && (
               <span
