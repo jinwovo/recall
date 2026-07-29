@@ -21,6 +21,10 @@ python run_eval.py gold.jsonl --json out.json --markdown summary.md
   nDCG@10 ≥ 0.85 — deliberately below measured values; a gate catches regressions, it isn't
   a leaderboard) and exits non-zero on breach. `--markdown` renders the table + verdicts for
   the GitHub step summary; `--json` dumps everything, per-query detail included.
+- `--modes` extends the sweep with the experimental paper modes (docs/adr/0008):
+  `hybrid-m3` (bge-m3 tri-modal self-hybrid rerank, deterministic) and `hyde`
+  (LLM hypothetical-document embeddings — needs a provider; free local Ollama works).
+  `make eval-sweep` runs all five. CI keeps the deterministic default sweep.
 - CI: `.github/workflows/eval.yml` boots the real stack, seeds the corpus through the async
   pipeline (`scripts/seed_corpus.py` polls ES until all docs are searchable), then runs the
   gate on every retrieval-affecting PR.

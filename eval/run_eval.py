@@ -34,14 +34,22 @@ for stream in (sys.stdout, sys.stderr):
         stream.reconfigure(errors="replace")
 
 API = os.getenv("RECALL_API", "http://localhost:8080")
-MODES = ["bm25", "vector", "hybrid"]
+DEFAULT_MODES = ["bm25", "vector", "hybrid"]      # what CI sweeps — deterministic, no LLM
+# Experimental modes (docs/adr/0008) opt in via --modes; each maps to API query params.
+MODE_PARAMS = {
+    "bm25": "mode=bm25",
+    "vector": "mode=vector",
+    "hybrid": "mode=hybrid",
+    "hybrid-m3": "mode=hybrid&rerank=m3",         # bge-m3 tri-modal self-hybrid rerank
+    "hyde": "mode=hyde",                          # LLM hypothetical-document embeddings
+}
 RETRIEVE_K = 10          # doc-level ranking depth; Recall is also reported at the 5 cutoff
 RECALL_CUTOFFS = (5, 10)
 
 
 def search(query: str, mode: str, attempts: int = 3) -> list[str]:
     """Ranked docIds for a query, deduplicated by first occurrence (chunk → doc level)."""
-    url = f"{API}/api/search?q=" + urllib.parse.quote(query) + f"&mode={mode}"
+    url = f"{API}/api/search?q=" + urllib.parse.quote(query) + f"&{MODE_PARAMS[mode]}"
     last: Exception | None = None
     for attempt in range(attempts):
         try:
@@ -125,7 +133,8 @@ def print_report(results: dict[str, dict], queries: int) -> None:
 
 def render_markdown(results: dict[str, dict], queries: int, gate: list[dict] | None,
                     gate_mode: str) -> str:
-    lines = ["## Retrieval eval — bm25 vs vector vs hybrid", ""]
+    modes = list(results)
+    lines = ["## Retrieval eval — " + " vs ".join(modes), ""]
     lines.append(f"{queries} queries · doc-level ranking depth {RETRIEVE_K} · `{API}`")
     lines.append("")
     lines.append("| mode | Recall@5 | Recall@10 | MRR@10 | nDCG@10 |")
@@ -147,11 +156,11 @@ def render_markdown(results: dict[str, dict], queries: int, gate: list[dict] | N
         lines.append("")
     lines.append("<details><summary>First relevant rank per query</summary>")
     lines.append("")
-    lines.append("| query | " + " | ".join(MODES) + " |")
-    lines.append("|---|" + ":---:|" * len(MODES))
-    for i, ex in enumerate(results[MODES[0]]["per_query"]):
+    lines.append("| query | " + " | ".join(modes) + " |")
+    lines.append("|---|" + ":---:|" * len(modes))
+    for i, ex in enumerate(results[modes[0]]["per_query"]):
         ranks = []
-        for mode in MODES:
+        for mode in modes:
             rank = results[mode]["per_query"][i]["first_hit_rank"]
             ranks.append(str(rank) if rank else "—")
         query = ex["query"] if len(ex["query"]) <= 48 else ex["query"][:47] + "…"
@@ -169,9 +178,12 @@ def main() -> int:
     parser.add_argument("--json", metavar="PATH", help="write full results as JSON")
     parser.add_argument("--markdown", metavar="PATH",
                         help="write a markdown report (GitHub step summary friendly)")
+    parser.add_argument("--modes", default=",".join(DEFAULT_MODES),
+                        help="comma-separated modes to sweep; also: "
+                             + ", ".join(m for m in MODE_PARAMS if m not in DEFAULT_MODES))
     parser.add_argument("--gate", action="store_true",
                         help="enforce thresholds on --gate-mode; exit 1 on regression")
-    parser.add_argument("--gate-mode", default="hybrid", choices=MODES)
+    parser.add_argument("--gate-mode", default="hybrid", choices=list(MODE_PARAMS))
     parser.add_argument("--min-recall5", type=float, default=0.90)
     parser.add_argument("--min-mrr10", type=float, default=0.85)
     parser.add_argument("--min-ndcg10", type=float, default=0.85)
@@ -180,7 +192,14 @@ def main() -> int:
     with open(args.gold, encoding="utf-8") as f:
         examples = [json.loads(line) for line in f if line.strip()]
 
-    results = {mode: evaluate_mode(examples, mode) for mode in MODES}
+    modes = [m.strip() for m in args.modes.split(",") if m.strip()]
+    unknown = [m for m in modes if m not in MODE_PARAMS]
+    if unknown:
+        parser.error(f"unknown mode(s) {unknown}; available: {list(MODE_PARAMS)}")
+    if args.gate and args.gate_mode not in modes:
+        parser.error(f"--gate-mode {args.gate_mode} is not in --modes {modes}")
+
+    results = {mode: evaluate_mode(examples, mode) for mode in modes}
     print_report(results, len(examples))
 
     gate = None
