@@ -38,10 +38,16 @@ public record RecallProperties(
         public record Ollama(String baseUrl, String model) {}
     }
 
-    /** RAG answer-quality guardrails (docs/adr/0004). */
-    public record Rag(Judge judge) {
+    /** RAG answer-quality guardrails (docs/adr/0004, 0009). */
+    public record Rag(Judge judge, Sufficiency sufficiency) {
         /** Post-hoc groundedness judge: fail-open, bounded by timeoutSeconds. */
         public record Judge(boolean enabled, int timeoutSeconds) {}
+
+        /**
+         * Pre-generation sufficiency gate (docs/adr/0009): runs only when the reranker's
+         * top score is below confidenceThreshold; fail-open, bounded by timeoutSeconds.
+         */
+        public record Sufficiency(boolean enabled, double confidenceThreshold, int timeoutSeconds) {}
     }
 
     /**

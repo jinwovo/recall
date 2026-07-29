@@ -17,11 +17,11 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 /**
- * RAG QA (docs/adr/0001, 0002, 0004): retrieve → assemble grounded prompt → stream answer over
- * SSE, then grade the finished answer with a post-hoc groundedness judge. Semantic-cache
- * short-circuit and a per-question query log included.
- * SSE event types: {@code sources}, {@code token}, {@code cache}, {@code judging},
- * {@code groundedness}, {@code done}, {@code error}.
+ * RAG QA (docs/adr/0001, 0002, 0004, 0009): retrieve → sufficiency gate → assemble grounded
+ * prompt → stream answer over SSE, then grade the finished answer with a post-hoc
+ * groundedness judge. Semantic-cache short-circuit and a per-question query log included.
+ * SSE event types: {@code sources}, {@code sufficiency}, {@code token}, {@code cache},
+ * {@code judging}, {@code groundedness}, {@code done}, {@code error}.
  */
 @Service
 public class RagService {
@@ -42,18 +42,20 @@ public class RagService {
     private final SemanticCacheService cache;
     private final LlmClient llm;
     private final GroundednessJudge judge;
+    private final SufficiencyCheck sufficiency;
     private final QueryLogService queryLog;
     private final ObjectMapper json;
     private final int topK;
 
     public RagService(SearchService search, EmbeddingClient embeddings, SemanticCacheService cache,
-                      LlmClient llm, GroundednessJudge judge, QueryLogService queryLog,
-                      ObjectMapper json, RecallProperties props) {
+                      LlmClient llm, GroundednessJudge judge, SufficiencyCheck sufficiency,
+                      QueryLogService queryLog, ObjectMapper json, RecallProperties props) {
         this.search = search;
         this.embeddings = embeddings;
         this.cache = cache;
         this.llm = llm;
         this.judge = judge;
+        this.sufficiency = sufficiency;
         this.queryLog = queryLog;
         this.json = json;
         this.topK = props.retrieval().topK();
@@ -92,18 +94,34 @@ public class RagService {
                                 .thenMany(Flux.just(sse("done", "")))));
             }
 
-            String prompt = buildPrompt(query, chunks);
-            StringBuilder answer = new StringBuilder();
+            // Sufficiency gate (docs/adr/0009): low-confidence retrieval gets a CHEAP-tier
+            // "can these passages answer this?" check — insufficient → abstain before
+            // spending the PRIMARY generation. Fail-open; the post-hoc judge still runs.
+            return sufficiency.allowGeneration(query, chunks).flatMapMany(sufficient -> {
+                if (!sufficient) {
+                    return Flux.concat(
+                            Flux.just(sse("sources", toJson(chunks)),
+                                    sse("sufficiency", "{\"verdict\":\"INSUFFICIENT\"}"),
+                                    sse("token", toJson(IDK))),
+                            Flux.defer(() -> queryLog.record(query, "ask", false, chunks.size(),
+                                            IDK.length(), elapsedMs(start), null)
+                                    .thenMany(Flux.just(sse("done", "")))));
+                }
 
-            Flux<ServerSentEvent<String>> sources = Flux.just(sse("sources", toJson(chunks)));
-            Flux<ServerSentEvent<String>> tokens = llm
-                    .streamAnswer(SYSTEM_PROMPT, prompt, ModelTier.PRIMARY)
-                    .doOnNext(answer::append)
-                    .map(t -> sse("token", toJson(t)));
-            // TODO: switch [n] citations → Claude native citations (claude provider + paid key).
-            Flux<ServerSentEvent<String>> tail = Flux.defer(() -> judged(query, vector, chunks, answer.toString(), start));
+                String prompt = buildPrompt(query, chunks);
+                StringBuilder answer = new StringBuilder();
 
-            return Flux.concat(sources, tokens, tail);
+                Flux<ServerSentEvent<String>> sources = Flux.just(sse("sources", toJson(chunks)));
+                Flux<ServerSentEvent<String>> tokens = llm
+                        .streamAnswer(SYSTEM_PROMPT, prompt, ModelTier.PRIMARY)
+                        .doOnNext(answer::append)
+                        .map(t -> sse("token", toJson(t)));
+                // TODO: switch [n] citations → Claude native citations (claude provider + paid key).
+                Flux<ServerSentEvent<String>> tail =
+                        Flux.defer(() -> judged(query, vector, chunks, answer.toString(), start));
+
+                return Flux.concat(sources, tokens, tail);
+            });
         });
     }
 

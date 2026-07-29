@@ -71,6 +71,10 @@ recall:
     judge:                     # post-hoc groundedness judge (docs/adr/0004) — fail-open
       enabled: ${RAG_JUDGE_ENABLED:true}
       timeout-seconds: ${RAG_JUDGE_TIMEOUT_SECONDS:45}
+    sufficiency:               # pre-generation sufficiency gate (docs/adr/0009) — fail-open
+      enabled: ${RAG_SUFFICIENCY_ENABLED:true}
+      confidence-threshold: ${RAG_SUFFICIENCY_CONFIDENCE_THRESHOLD:0.35}   # skip check above this rerank score
+      timeout-seconds: ${RAG_SUFFICIENCY_TIMEOUT_SECONDS:45}   # CPU 3B prefill needs headroom; fail-open past this
   llm:                         # provider toggle: claude (default) | groq (free)
     provider: ${LLM_PROVIDER:claude}
     groq:

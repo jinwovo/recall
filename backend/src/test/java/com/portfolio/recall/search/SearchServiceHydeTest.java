@@ -45,7 +45,8 @@ class SearchServiceHydeTest {
                 new RecallProperties.Retrieval(50, 8, 60),
                 new RecallProperties.Models("primary", "balanced", "cheap"),
                 new RecallProperties.Llm("ollama", null, null),
-                new RecallProperties.Rag(new RecallProperties.Rag.Judge(false, 5)),
+                new RecallProperties.Rag(new RecallProperties.Rag.Judge(false, 5),
+                        new RecallProperties.Rag.Sufficiency(false, 0.35, 5)),
                 new RecallProperties.Storage("http://localhost:9000", "a", "s", "b", 65536));
         service = new SearchService(index, embeddings, llm, props, meters);
     }
