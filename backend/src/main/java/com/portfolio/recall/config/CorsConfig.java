@@ -1,5 +1,6 @@
 package com.portfolio.recall.config;
 
+import com.portfolio.recall.search.RerankStrategy;
 import com.portfolio.recall.search.SearchMode;
 import java.util.Locale;
 import org.springframework.context.annotation.Configuration;
@@ -19,10 +20,13 @@ public class CorsConfig implements WebFluxConfigurer {
                 .allowedHeaders("*");
     }
 
-    /** Accept ?mode=hybrid / HYBRID / Hybrid alike. */
+    /** Accept ?mode=hybrid / HYBRID / Hybrid and ?rerank=m3 / cross-encoder alike. */
     @Override
     public void addFormatters(FormatterRegistry registry) {
         registry.addConverter(String.class, SearchMode.class,
                 src -> SearchMode.valueOf(src.trim().toUpperCase(Locale.ROOT)));
+        registry.addConverter(String.class, RerankStrategy.class,
+                src -> RerankStrategy.valueOf(
+                        src.trim().toUpperCase(Locale.ROOT).replace('-', '_')));
     }
 }

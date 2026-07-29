@@ -40,12 +40,26 @@ public class EmbeddingClient {
                 .map(RerankResponse::results);
     }
 
+    /**
+     * bge-m3 tri-modal self-hybrid scoring (weighted dense + sparse + ColBERT, weights
+     * server-side — docs/adr/0008): indices+scores of the passages, best first.
+     */
+    public Mono<List<RerankItem>> scoreM3(String query, List<String> passages) {
+        return web.post().uri("/score_m3")
+                .bodyValue(new M3ScoreRequest(query, passages))
+                .retrieve()
+                .bodyToMono(RerankResponse.class)
+                .map(RerankResponse::results);
+    }
+
     // ---- DTOs (match the FastAPI sidecar) ----
     public record EmbedRequest(List<String> texts) {}
 
     public record EmbedResponse(List<float[]> embeddings) {}
 
     public record RerankRequest(String query, List<String> passages, int topK) {}
+
+    public record M3ScoreRequest(String query, List<String> passages) {}
 
     public record RerankResponse(List<RerankItem> results) {}
 
