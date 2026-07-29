@@ -58,6 +58,25 @@ class RerankResponse(BaseModel):
     results: list[RerankItem]
 
 
+class M3ScoreRequest(BaseModel):
+    query: str
+    passages: list[str]
+    # Fusion weights [dense, sparse, colbert] — see docs/adr/0008 (BGE-M3 paper, §self-hybrid).
+    weights: list[float] = [0.4, 0.2, 0.4]
+
+
+class M3ScoreItem(BaseModel):
+    index: int
+    score: float
+    dense: float
+    sparse: float
+    colbert: float
+
+
+class M3ScoreResponse(BaseModel):
+    results: list[M3ScoreItem]
+
+
 @app.post("/embed", response_model=EmbedResponse)
 def embed(req: EmbedRequest) -> EmbedResponse:
     vecs = _models["embed"].encode(req.texts, batch_size=16, max_length=1024)["dense_vecs"]
@@ -74,6 +93,31 @@ def rerank(req: RerankRequest) -> RerankResponse:
         scores = [scores]
     ranked = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)[: req.topK]
     return RerankResponse(results=[RerankItem(index=i, score=float(s)) for i, s in ranked])
+
+
+@app.post("/score_m3", response_model=M3ScoreResponse)
+def score_m3(req: M3ScoreRequest) -> M3ScoreResponse:
+    """Tri-modal scoring with bge-m3 itself: dense + sparse lexical + ColBERT MaxSim,
+    combined as a weighted sum per the BGE-M3 paper's self-hybrid retrieval. An alternative
+    rerank stage to the cross-encoder — same model that produced the index embeddings."""
+    if not req.passages:
+        return M3ScoreResponse(results=[])
+    if len(req.weights) != 3:
+        raise ValueError("weights must be [dense, sparse, colbert]")
+    pairs = [[req.query, p] for p in req.passages]
+    scores = _models["embed"].compute_score(pairs, batch_size=8, max_passage_length=1024)
+    w_dense, w_sparse, w_colbert = req.weights
+    items = [
+        M3ScoreItem(
+            index=i,
+            score=w_dense * d + w_sparse * s + w_colbert * c,
+            dense=float(d), sparse=float(s), colbert=float(c),
+        )
+        for i, (d, s, c) in enumerate(
+            zip(scores["dense"], scores["sparse"], scores["colbert"]))
+    ]
+    items.sort(key=lambda it: it.score, reverse=True)
+    return M3ScoreResponse(results=items)
 
 
 @app.get("/health")
