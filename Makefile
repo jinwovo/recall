@@ -1,4 +1,4 @@
-.PHONY: up down logs backend frontend seed seed-corpus eval eval-gate eval-sweep loadtest
+.PHONY: up down logs backend frontend seed seed-corpus ingest eval eval-gate eval-sweep loadtest
 
 up:            ## start infra (ES, Redis, Postgres, Kafka, MinIO, sidecar, Prometheus, Grafana)
 	docker compose up -d
@@ -20,6 +20,9 @@ seed:          ## ingest sample documents
 
 seed-corpus:   ## ingest the eval corpus and wait for async indexing to converge
 	python scripts/seed_corpus.py eval/corpus.jsonl
+
+ingest:        ## ingest your own documents: make ingest DIR=~/my-docs
+	python scripts/ingest_folder.py $(DIR)
 
 eval:          ## run the retrieval eval harness
 	cd eval && python run_eval.py queries.example.jsonl
