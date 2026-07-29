@@ -67,6 +67,11 @@ check). Consumer failures retry with exponential backoff and dead-letter to
 `recall.ingestion.dlq` with forensic headers — poison pills skip retries. See
 [`adr/0005`](adr/0005-ingestion-reliability-dlq-claim-check.md).
 
+Recovery: `/api/admin/dlq` (+ the frontend `/admin` ops page) inspects the backlog with
+decoded forensics and replays it under a dedicated consumer group — publish broker-acked
+before offset commit, provenance headers across round-trips; safe at-least-once because the
+sink is idempotent. See [`adr/0006`](adr/0006-dlq-replay-admin.md).
+
 ## Elasticsearch mapping (sketch)
 
 ```jsonc
@@ -100,7 +105,8 @@ check). Consumer failures retry with exponential backoff and dead-letter to
 - Micrometer → Prometheus → Grafana (dashboard provisioned under `monitoring/`).
 - Custom metrics: `recall_retrieval_latency` (by mode), `recall_llm_tokens_total{model,type}`,
   `recall_semantic_cache_hits_total`, `recall_ingestion_docs_total`/`_chunks_total`,
-  `recall_ingestion_retries_total`/`_dlq_total`/`_raw_store_failures_total` (reliability, adr/0005).
+  `recall_ingestion_retries_total`/`_dlq_total`/`_dlq_replayed_total`/`_raw_store_failures_total`
+  (reliability, adr/0005 + adr/0006).
 - Per-question rows persisted to Postgres (`query_log`): latency, cache hit, source count.
 
 ## Deployment
