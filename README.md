@@ -140,6 +140,30 @@ comparison and a per-query first-relevant-rank matrix land in the job's step sum
 regression shows *which query* fell to *which rank*. Metrics are doc-level (chunk hits
 deduplicated). Locally: `make seed-corpus && make eval-gate`. Design: [ADR 0007](docs/adr/0007-eval-ci-regression-gate.md).
 
+**Use the gate in your own repo** — the harness ships as a reusable composite action
+([`rag-eval-gate`](.github/actions/rag-eval-gate/action.yml)); point it at any API that
+speaks `GET /api/search?q=&mode=` and a JSONL gold set:
+
+```yaml
+- uses: jinwovo/recall/.github/actions/rag-eval-gate@main
+  with:
+    api-url: http://localhost:8080
+    gold-file: eval/gold.jsonl
+    corpus-file: eval/corpus.jsonl     # optional: seed + wait for async indexing first
+    min-mrr10: "0.85"
+```
+
+Our own eval workflow consumes exactly this action — dogfooding is the compatibility test.
+
+### The index that tunes itself
+
+A nightly [`tune` workflow](.github/workflows/tune.yml) sweeps retrieval knobs (`rrf-k`,
+fused `candidates`) against the gold set through clamped API overrides
+(`/api/search?...&rrfK=&candidates=`), and when a configuration beats the baseline
+`MRR@10` by more than epsilon, it **opens a pull request** applying it — sweep table in
+the body, and the eval gate above re-runs on that PR to prove it. The loop proposes, the
+gate disposes, a human merges ([ADR 0010](docs/adr/0010-tool-round-ingest-mcp-action-selftune.md)).
+
 ### Paper-backed techniques
 
 Every retrieval stage cites its source — and the recent additions were adopted the same
@@ -204,6 +228,25 @@ cd eval && python run_eval.py gold.jsonl       # bm25 vs vector vs hybrid compar
 
 To run the RAG answer for free with no API key, set `LLM_PROVIDER=ollama` (and have Ollama
 running locally) — see [Configuration](#configuration).
+
+### Bring your own documents
+
+```bash
+python scripts/ingest_folder.py ~/my-docs          # .md / .txt / .html (+ .pdf with pypdf)
+python scripts/ingest_folder.py ./wiki --dry-run   # see what would be ingested
+```
+
+Every file goes through the real pipeline — Kafka, chunking, embeddings, idempotent
+upserts, the durability contract of ADR 0005 — then the command waits until everything is
+actually searchable. Re-running is the sync mechanism: unchanged files converge, changed
+files reindex.
+
+### Use it from Claude (MCP)
+
+[`mcp-server/`](mcp-server/) exposes `recall_search` and `recall_ask` over the Model
+Context Protocol — point Claude Desktop / Claude Code at your running stack and your
+documents become agent tools, citations and groundedness verdict included. Setup is one
+config block; see the [mcp-server README](mcp-server/README.md).
 
 ## API
 
@@ -286,7 +329,8 @@ replays, raw-archive failures). Grafana at `localhost:3001`, Prometheus at `loca
 backend/            Spring Boot (Java 21) — search, rag, ingestion, llm providers, cache
 embedding-service/  Python FastAPI sidecar — bge-m3 embeddings + bge-reranker
 frontend/           Next.js UI — search / QA, streamed answers, citation highlight
-eval/               eval harness (Recall@K / MRR / nDCG) + corpus + gold set
+mcp-server/         MCP stdio server — your corpus as agent tools (search / ask)
+eval/               eval harness + self-tuning sweep + corpus + gold set
 deploy/helm/recall/ Helm chart (k8s) for backend + sidecar
 monitoring/         Prometheus + Grafana provisioning
 docs/               PROJECT_PLAN, ARCHITECTURE, ADRs
@@ -311,6 +355,7 @@ docker-compose.yml
 - [ADR 0007 — Retrieval eval as a CI regression gate](docs/adr/0007-eval-ci-regression-gate.md)
 - [ADR 0008 — Paper-backed retrieval: M3 tri-modal self-hybrid & HyDE](docs/adr/0008-paper-backed-retrieval-m3-hyde.md)
 - [ADR 0009 — 2025-paper adoption: sufficiency gate & BBQ-quantized vectors](docs/adr/0009-sufficient-context-bbq.md)
+- [ADR 0010 — From portfolio to tool: folder ingestion, MCP, reusable gate, self-tuning](docs/adr/0010-tool-round-ingest-mcp-action-selftune.md)
 
 ## 한국어 요약
 
