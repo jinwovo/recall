@@ -6,14 +6,16 @@ hard parts are retrieval quality, latency budgets, LLM cost control, and grounde
 all measured, not asserted.
 
 [![CI](https://github.com/jinwovo/recall/actions/workflows/ci.yml/badge.svg)](https://github.com/jinwovo/recall/actions/workflows/ci.yml)
+[![eval](https://github.com/jinwovo/recall/actions/workflows/eval.yml/badge.svg)](https://github.com/jinwovo/recall/actions/workflows/eval.yml)
 
 > Status: active build. Verified end-to-end on Docker Compose — the full stack (Elasticsearch
 > with Nori, Redis, Postgres, Kafka, MinIO, embedding sidecar, backend) runs, and the RAG QA
-> path works with a free local LLM (Ollama). CI runs backend unit tests plus two Testcontainers
-> integration suites — idempotent ingestion under concurrency (real ES 8 + Nori) and the
-> retry/DLQ/claim-check failure policy (real Kafka + MinIO) — along with the frontend build,
-> sidecar syntax check, and `helm lint`. This README is honest about what runs today vs. what
-> is planned.
+> path works with a free local LLM (Ollama). CI runs backend unit tests plus three Testcontainers
+> integration suites — idempotent ingestion under concurrency (real ES 8 + Nori), the
+> retry/DLQ/claim-check failure policy, and DLQ replay recovery (real Kafka + MinIO) — along
+> with the frontend build, sidecar syntax check, and `helm lint`. A separate **eval workflow
+> boots the real retrieval stack and fails the build if hybrid quality regresses** (ADR 0007).
+> This README is honest about what runs today vs. what is planned.
 
 ## Demo
 
@@ -86,25 +88,40 @@ Design decisions and trade-offs are recorded in [`docs/adr/`](docs/adr/); compon
 | RAG with `[n]` citations + groundedness guardrail | Grounded generation, post-hoc LLM-judge verification, "I don't know" handling | groundedness %, citation coverage |
 | LLM cost & latency control | Model tiering, prompt caching, semantic cache, batch | $/query, cache hit rate, % saved |
 | Multilingual KO/EN | Korean morphology (Nori) + multilingual embeddings | per-language recall, cross-lingual hits |
-| Reliable async ingestion | Idempotency (200 concurrent upserts → 1 doc), retry/backoff + dead-letter queue (poison pills quarantined, nothing silently dropped), claim-check raw storage in MinIO — each proven by Testcontainers ITs against real ES / Kafka / MinIO | docs/s, DLQ rate, zero dup/loss |
-| Eval-driven development | Measured iteration, CI regression gate | eval trend |
+| Reliable async ingestion | Idempotency (200 concurrent upserts → 1 doc), retry/backoff + dead-letter queue (poison pills quarantined, nothing silently dropped), claim-check raw storage in MinIO, DLQ inspect/replay ops tooling — each proven by Testcontainers ITs against real ES / Kafka / MinIO | docs/s, DLQ rate, zero dup/loss |
+| Eval-driven development | Measured iteration, enforced: retrieval eval runs as a CI gate on every PR | Recall@5 / MRR@10 / nDCG@10 vs thresholds |
 | Pluggable LLM provider | Provider abstraction (Claude / Groq / Ollama) | — |
 
 ## Measured results
 
 Measured end-to-end on the running stack over a 24-document technical corpus with a 10-query
 gold set (exact-term, paraphrased, and Korean cross-lingual), via
-[`eval/run_eval.py`](eval/run_eval.py):
+[`eval/run_eval.py`](eval/run_eval.py) — doc-level metrics (chunk hits deduplicated by first
+occurrence; re-measured after correcting the metric, which previously let one document's
+chunks occupy several ranks):
 
 | mode | Recall@5 | Recall@10 | MRR@10 | nDCG@10 |
 |---|:---:|:---:|:---:|:---:|
-| BM25-only | 0.70 | 0.80 | 0.67 | 0.70 |
-| vector-only | 1.00 | 1.00 | 0.90 | 0.93 |
-| **hybrid (RRF + rerank)** | **1.00** | **1.00** | **0.95** | **0.96** |
+| BM25-only | 0.70 | 0.80 | 0.65 | 0.69 |
+| vector-only | 1.00 | 1.00 | 0.88 | 0.91 |
+| **hybrid (RRF + rerank)** | **1.00** | **1.00** | **0.93** | **0.95** |
 
-Hybrid lifts Recall@5 by **+0.30 over BM25** and MRR@10 from 0.67 to **0.95**: exact-term
+Hybrid lifts Recall@5 by **+0.30 over BM25** and MRR@10 from 0.65 to **0.93**: exact-term
 queries favor BM25, paraphrased/Korean queries favor dense vectors, and RRF + the
-cross-encoder reranker combine both.
+cross-encoder reranker combine both — both Korean cross-lingual queries are BM25 misses but
+hybrid rank 1.
+
+### Eval as a CI regression gate
+
+The table above is not a one-off measurement: the [`eval` workflow](.github/workflows/eval.yml)
+re-produces it on every retrieval-affecting PR — real ES + Nori, real bge-m3 sidecar (weights
+held in the Actions cache), the corpus seeded through the real Kafka pipeline behind a
+[deterministic indexing barrier](scripts/seed_corpus.py) — and **fails the build** if hybrid
+drops below Recall@5 ≥ 0.90, MRR@10 ≥ 0.85 or nDCG@10 ≥ 0.85 (thresholds sit under the
+measured values by design: the gate catches regressions, it isn't a leaderboard). The mode
+comparison and a per-query first-relevant-rank matrix land in the job's step summary, so a
+regression shows *which query* fell to *which rank*. Metrics are doc-level (chunk hits
+deduplicated). Locally: `make seed-corpus && make eval-gate`. Design: [ADR 0007](docs/adr/0007-eval-ci-regression-gate.md).
 
 ### RAG answer quality (groundedness)
 
@@ -145,8 +162,8 @@ docker compose up -d                 # ES (Nori), Redis, Postgres, Kafka, MinIO,
 cd backend && gradle wrapper && ./gradlew bootRun
 cd frontend && npm install && npm run dev      # http://localhost:3000
 
-./scripts/seed.sh                              # ingest sample docs
-cd eval && python run_eval.py gold.jsonl       # bm25 vs vector vs hybrid comparison
+python scripts/seed_corpus.py                  # ingest the eval corpus (waits for async indexing)
+cd eval && python run_eval.py gold.jsonl       # bm25 vs vector vs hybrid comparison; --gate = CI thresholds
 ```
 
 To run the RAG answer for free with no API key, set `LLM_PROVIDER=ollama` (and have Ollama
@@ -159,6 +176,8 @@ running locally) — see [Configuration](#configuration).
 | `GET` | `/api/search?q=&mode=` | `mode` = `hybrid` (default) `\|` `bm25` `\|` `vector` |
 | `GET` | `/api/ask?q=` | SSE stream: `sources`, `token`, `judging`, `groundedness`, `done`; grounded answer with `[n]` citations |
 | `POST` | `/api/ingest` | async index a document; `202` ⇒ raw doc archived + broker-acked (ADR 0005) |
+| `GET` | `/api/admin/dlq?limit=` | DLQ depth + bounded peek with decoded forensic headers (ADR 0006) |
+| `POST` | `/api/admin/dlq/replay?max=` | drain pending DLQ records back onto the ingestion topic (ADR 0006) |
 | `GET` | `/actuator/prometheus` | metrics scrape |
 
 ## Configuration
@@ -196,12 +215,24 @@ MinIO (Testcontainers), and `recall_ingestion_retries_total` / `recall_ingestion
 feed a Grafana panel — a non-zero DLQ rate is a visible signal, not a buried log line.
 Design: [ADR 0005](docs/adr/0005-ingestion-reliability-dlq-claim-check.md).
 
+The DLQ is a queue, not a graveyard: the **`/admin` ops page** (and the API rows above) close
+the incident loop — inspect the decoded forensics, fix the fault, one-click **replay** the
+backlog. Replay re-publishes broker-acked *before* committing DLQ offsets (at-least-once by
+choice — chunk upserts are idempotent by content hash, so duplicate replays converge), strips
+stale `kafka_dlt-*` headers so a re-failure earns fresh forensics, and stamps provenance
+(`recall_dlq-replays`, `recall_dlq-replay-source`) that survives repeated round-trips. A
+replayed poison pill simply dead-letters again with its count incremented — visible bouncing,
+never silent loss. Proven end-to-end by `DlqReplayIT`.
+Design: [ADR 0006](docs/adr/0006-dlq-replay-admin.md).
+
+![Recall ops — DLQ](docs/screenshots/admin-dlq.png)
+
 ## Observability
 
 Micrometer metrics exported to Prometheus and a provisioned Grafana dashboard
 (**Recall — Overview**): LLM tokens by model, semantic-cache hits, retrieval p95 by mode,
 groundedness verdicts, ingestion throughput, and ingestion reliability (retries, DLQ rate,
-raw-archive failures). Grafana at `localhost:3001`, Prometheus at `localhost:9090`.
+replays, raw-archive failures). Grafana at `localhost:3001`, Prometheus at `localhost:9090`.
 
 ## Project layout
 
@@ -219,8 +250,9 @@ docker-compose.yml
 ## Roadmap
 
 - Claude native citations (exact char-span grounding) when the `claude` provider is configured
-- Retrieval + groundedness eval regression gate in CI
-- DLQ replay tooling (inspect → fix → re-publish) on the admin surface
+- Groundedness eval as a second CI gate, once a budgeted API key makes LLM-judging in CI viable
+  (retrieval already gates — ADR 0007)
+- Selective DLQ replay (by key / offset range) if mixed-cause backlogs ever materialize
 
 ## Decision records
 
@@ -229,6 +261,8 @@ docker-compose.yml
 - [ADR 0003 — Async, idempotent ingestion via Kafka](docs/adr/0003-async-ingestion-kafka.md)
 - [ADR 0004 — Post-hoc groundedness judge (hallucination guardrail)](docs/adr/0004-groundedness-guardrail.md)
 - [ADR 0005 — Ingestion reliability: retries, DLQ, claim-check raw storage](docs/adr/0005-ingestion-reliability-dlq-claim-check.md)
+- [ADR 0006 — DLQ replay: consumer-group drain on the admin surface](docs/adr/0006-dlq-replay-admin.md)
+- [ADR 0007 — Retrieval eval as a CI regression gate](docs/adr/0007-eval-ci-regression-gate.md)
 
 ## 한국어 요약
 
