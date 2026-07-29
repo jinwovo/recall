@@ -104,12 +104,20 @@ chunks occupy several ranks):
 |---|:---:|:---:|:---:|:---:|
 | BM25-only | 0.70 | 0.80 | 0.65 | 0.69 |
 | vector-only | 1.00 | 1.00 | 0.88 | 0.91 |
-| **hybrid (RRF + rerank)** | **1.00** | **1.00** | **0.93** | **0.95** |
+| **hybrid (RRF + cross-encoder)** | **1.00** | **1.00** | **0.93** | **0.95** |
+| hybrid, `rerank=m3` (tri-modal self-hybrid) | 1.00 | 1.00 | 0.88 | 0.91 |
+| `mode=hyde` (hypothetical-doc kNN, no rerank) | 1.00 | 1.00 | 0.75 | 0.82 |
 
 Hybrid lifts Recall@5 by **+0.30 over BM25** and MRR@10 from 0.65 to **0.93**: exact-term
 queries favor BM25, paraphrased/Korean queries favor dense vectors, and RRF + the
 cross-encoder reranker combine both — both Korean cross-lingual queries are BM25 misses but
 hybrid rank 1.
+
+The paper-mode rows (ADR 0008) are the harness discriminating, not a leaderboard of wins:
+the M3 self-hybrid trades **−0.05 MRR for dropping the second model from memory**; HyDE
+recovers every document BM25 misses (Recall@5 0.70 → 1.00) with **zero-shot kNN alone**,
+but without a rerank stage its ordering is looser — which is exactly why the cross-encoder
+hybrid stays the default.
 
 ### Eval as a CI regression gate
 
@@ -122,6 +130,23 @@ measured values by design: the gate catches regressions, it isn't a leaderboard)
 comparison and a per-query first-relevant-rank matrix land in the job's step summary, so a
 regression shows *which query* fell to *which rank*. Metrics are doc-level (chunk hits
 deduplicated). Locally: `make seed-corpus && make eval-gate`. Design: [ADR 0007](docs/adr/0007-eval-ci-regression-gate.md).
+
+### Paper-backed techniques
+
+Every retrieval stage cites its source — and the recent additions were adopted the same
+way everything else was: implemented, swept by the eval harness, numbers published
+([ADR 0008](docs/adr/0008-paper-backed-retrieval-m3-hyde.md)):
+
+| Technique | Paper | In this repo |
+|---|---|---|
+| Reciprocal Rank Fusion | Cormack et al., SIGIR 2009 | BM25 + kNN fusion (`rrf-k=60`) |
+| Multilingual dense retrieval + cross-encoder rerank | BGE / bge-reranker-v2-m3 — Chen et al., 2024 | embedding sidecar, default rerank |
+| **M3 tri-modal self-hybrid** (dense + sparse + ColBERT) | *BGE M3-Embedding*, Chen et al., 2024 | `/api/search?rerank=m3` — the embedder's own sparse + multi-vector heads as an alternative rerank stage, no extra model |
+| **HyDE** (hypothetical document embeddings) | Gao et al., ACL 2023 | `/api/search?mode=hyde` — CHEAP-tier LLM writes a hypothetical answer passage, its embedding retrieves; fail-open to vector search |
+| Post-hoc LLM-judge grading | LLM-as-judge line of work | groundedness guardrail (ADR 0004) |
+
+GraphRAG / RAPTOR (corpus-global questions) and late chunking (long-document corpora)
+were evaluated and deliberately deferred — the rejection reasoning is in ADR 0008.
 
 ### RAG answer quality (groundedness)
 
@@ -173,7 +198,7 @@ running locally) — see [Configuration](#configuration).
 
 | Method | Path | Notes |
 |---|---|---|
-| `GET` | `/api/search?q=&mode=` | `mode` = `hybrid` (default) `\|` `bm25` `\|` `vector` |
+| `GET` | `/api/search?q=&mode=&rerank=` | `mode` = `hybrid` (default) `\|` `bm25` `\|` `vector` `\|` `hyde`; `rerank` (hybrid only) = `cross-encoder` (default) `\|` `m3` (ADR 0008) |
 | `GET` | `/api/ask?q=` | SSE stream: `sources`, `token`, `judging`, `groundedness`, `done`; grounded answer with `[n]` citations |
 | `POST` | `/api/ingest` | async index a document; `202` ⇒ raw doc archived + broker-acked (ADR 0005) |
 | `GET` | `/api/admin/dlq?limit=` | DLQ depth + bounded peek with decoded forensic headers (ADR 0006) |
@@ -263,6 +288,7 @@ docker-compose.yml
 - [ADR 0005 — Ingestion reliability: retries, DLQ, claim-check raw storage](docs/adr/0005-ingestion-reliability-dlq-claim-check.md)
 - [ADR 0006 — DLQ replay: consumer-group drain on the admin surface](docs/adr/0006-dlq-replay-admin.md)
 - [ADR 0007 — Retrieval eval as a CI regression gate](docs/adr/0007-eval-ci-regression-gate.md)
+- [ADR 0008 — Paper-backed retrieval: M3 tri-modal self-hybrid & HyDE](docs/adr/0008-paper-backed-retrieval-m3-hyde.md)
 
 ## 한국어 요약
 
