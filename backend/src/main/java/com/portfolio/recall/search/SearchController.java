@@ -17,12 +17,17 @@ public class SearchController {
         this.service = service;
     }
 
-    /** {@code mode} is bm25 | vector | hybrid (default). Case-insensitive (see CorsConfig converter). */
+    /**
+     * {@code mode} is bm25 | vector | hybrid (default) | hyde; {@code rerank} applies to
+     * hybrid only: cross-encoder (default) | m3 (docs/adr/0008). Both case-insensitive
+     * (see CorsConfig converters).
+     */
     @GetMapping
     public Mono<SearchResponse> search(
             @RequestParam("q") String q,
-            @RequestParam(value = "mode", defaultValue = "HYBRID") SearchMode mode) {
-        return service.search(q, mode)
+            @RequestParam(value = "mode", defaultValue = "HYBRID") SearchMode mode,
+            @RequestParam(value = "rerank", defaultValue = "CROSS_ENCODER") RerankStrategy rerank) {
+        return service.search(q, mode, rerank)
                 .map(results -> new SearchResponse(q, mode.name().toLowerCase(), results));
     }
 
