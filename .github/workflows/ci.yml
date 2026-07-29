@@ -56,3 +56,12 @@ jobs:
       - uses: azure/setup-helm@v4
       - run: helm lint deploy/helm/recall
       - run: helm template recall deploy/helm/recall > /dev/null
+
+  # The rag-eval-gate action vendors run_eval.py / seed_corpus.py so external repos get a
+  # self-contained action — this guard fails the build if the copies drift from canonical.
+  action-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: diff eval/run_eval.py .github/actions/rag-eval-gate/run_eval.py
+      - run: diff scripts/seed_corpus.py .github/actions/rag-eval-gate/seed_corpus.py

@@ -17,6 +17,7 @@ on:
       - "docker-compose.yml"
       - "docker-compose.ci.yml"
       - ".github/workflows/eval.yml"
+      - ".github/actions/rag-eval-gate/**"
   pull_request:
     paths:
       - "backend/**"
@@ -27,6 +28,7 @@ on:
       - "docker-compose.yml"
       - "docker-compose.ci.yml"
       - ".github/workflows/eval.yml"
+      - ".github/actions/rag-eval-gate/**"
   workflow_dispatch:
 
 concurrency:
@@ -52,17 +54,15 @@ jobs:
           docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile full
           up -d --build --wait backend embedding-service minio
 
-      - name: Seed corpus through the async pipeline (indexing barrier)
-        run: python3 scripts/seed_corpus.py eval/corpus.jsonl --timeout 420
-
-      - name: Run gated retrieval eval
-        run: >
-          python3 eval/run_eval.py eval/gold.jsonl --gate
-          --json eval-results.json --markdown eval-summary.md
-
-      - name: Publish step summary
-        if: always()
-        run: if [ -f eval-summary.md ]; then cat eval-summary.md >> "$GITHUB_STEP_SUMMARY"; fi
+      # Dogfooding the reusable composite action — external repos use the same thing via
+      #   uses: jinwovo/recall/.github/actions/rag-eval-gate@main
+      - name: Seed + gated eval (rag-eval-gate action)
+        uses: ./.github/actions/rag-eval-gate
+        with:
+          api-url: http://localhost:8080
+          gold-file: eval/gold.jsonl
+          corpus-file: eval/corpus.jsonl
+          es-url: http://localhost:9200
 
       - name: Upload eval results
         if: always()
@@ -70,8 +70,8 @@ jobs:
         with:
           name: eval-results
           path: |
-            eval-results.json
-            eval-summary.md
+            rag-eval-results.json
+            rag-eval-summary.md
           if-no-files-found: ignore
 
       - name: Dump service logs on failure
