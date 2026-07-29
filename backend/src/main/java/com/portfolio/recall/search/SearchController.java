@@ -20,14 +20,17 @@ public class SearchController {
     /**
      * {@code mode} is bm25 | vector | hybrid (default) | hyde; {@code rerank} applies to
      * hybrid only: cross-encoder (default) | m3 (docs/adr/0008). Both case-insensitive
-     * (see CorsConfig converters).
+     * (see CorsConfig converters). {@code rrfK} / {@code candidates} are clamped tuning
+     * overrides used by the self-tuning sweep (docs/adr/0010).
      */
     @GetMapping
     public Mono<SearchResponse> search(
             @RequestParam("q") String q,
             @RequestParam(value = "mode", defaultValue = "HYBRID") SearchMode mode,
-            @RequestParam(value = "rerank", defaultValue = "CROSS_ENCODER") RerankStrategy rerank) {
-        return service.search(q, mode, rerank)
+            @RequestParam(value = "rerank", defaultValue = "CROSS_ENCODER") RerankStrategy rerank,
+            @RequestParam(value = "rrfK", required = false) Integer rrfK,
+            @RequestParam(value = "candidates", required = false) Integer candidates) {
+        return service.search(q, mode, rerank, TuningOverrides.of(rrfK, candidates))
                 .map(results -> new SearchResponse(q, mode.name().toLowerCase(), results));
     }
 

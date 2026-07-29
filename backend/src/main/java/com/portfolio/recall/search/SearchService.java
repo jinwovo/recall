@@ -80,26 +80,31 @@ public class SearchService {
     }
 
     public Mono<List<RetrievedChunk>> search(String query, SearchMode mode, RerankStrategy strategy) {
-        int candidates = props.retrieval().candidates();
+        return search(query, mode, strategy, TuningOverrides.NONE);
+    }
+
+    public Mono<List<RetrievedChunk>> search(String query, SearchMode mode, RerankStrategy strategy,
+                                             TuningOverrides tuning) {
+        int candidates = tuning.candidatesOr(props.retrieval().candidates());
         return switch (mode) {
             case BM25 -> timed(mode, blocking(() -> index.bm25(query, candidates)));
             case VECTOR -> timed(mode, embeddings.embedOne(query)
                     .flatMap(vec -> blocking(() -> index.knn(vec, candidates))));
             case HYBRID -> embeddings.embedOne(query)
-                    .flatMap(vec -> hybridWithVector(query, vec, strategy));
+                    .flatMap(vec -> hybridWithVector(query, vec, strategy, tuning));
             case HYDE -> timed(mode, hyde(query, candidates));
         };
     }
 
     /** Hybrid retrieval with a precomputed query embedding (reused from the RAG cache key). */
     public Mono<List<RetrievedChunk>> hybridWithVector(String query, float[] vector) {
-        return hybridWithVector(query, vector, RerankStrategy.CROSS_ENCODER);
+        return hybridWithVector(query, vector, RerankStrategy.CROSS_ENCODER, TuningOverrides.NONE);
     }
 
     public Mono<List<RetrievedChunk>> hybridWithVector(String query, float[] vector,
-                                                       RerankStrategy strategy) {
-        int candidates = props.retrieval().candidates();
-        int rrfK = props.retrieval().rrfK();
+                                                       RerankStrategy strategy, TuningOverrides tuning) {
+        int candidates = tuning.candidatesOr(props.retrieval().candidates());
+        int rrfK = tuning.rrfKOr(props.retrieval().rrfK());
         Mono<List<RetrievedChunk>> fused = blocking(() -> {
             List<RetrievedChunk> bm25 = index.bm25(query, candidates);
             List<RetrievedChunk> knn = index.knn(vector, candidates);
