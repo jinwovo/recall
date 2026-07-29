@@ -1,28 +1,29 @@
 # Eval harness
 
-Measures retrieval quality so improvements are **numbers, not vibes** (docs/adr/0001).
+Measures retrieval quality so improvements are **numbers, not vibes** (docs/adr/0001) — and
+enforces them in CI so regressions are **build failures, not surprises** (docs/adr/0007).
 
 ```bash
-python run_eval.py queries.example.jsonl
-# RECALL_API=http://localhost:8080 EVAL_K=10 python run_eval.py my_queries.jsonl
+python run_eval.py gold.jsonl                                  # comparison table
+python run_eval.py gold.jsonl --gate                           # CI mode: exit 1 on regression
+python run_eval.py gold.jsonl --json out.json --markdown summary.md
+# RECALL_API=http://localhost:18080 python run_eval.py gold.jsonl
 ```
 
 - Gold set format: JSONL, one `{ "query": "...", "relevant_doc_ids": ["..."] }` per line.
-- Reports **Recall@K**, **MRR@K**, **nDCG@K**.
-- **Sweeps `bm25` / `vector` / `hybrid` automatically** (via `/api/search?mode=`) and prints a
-  comparison table — the hybrid lift is the README headline number. Example:
-
-  ```
-  queries=3  K=10
-
-  mode        Recall@K     MRR@K    nDCG@K
-  ----------------------------------------
-  bm25           0.667     0.583     0.612
-  vector         0.667     0.667     0.701
-  hybrid         1.000     0.917     0.945
-  ```
-  (illustrative — fill in with your own gold set)
-- Wire this into CI as a regression gate once you have a stable gold set.
+- **Sweeps `bm25` / `vector` / `hybrid` automatically** (via `/api/search?mode=`) and reports
+  **Recall@5, Recall@10, MRR@10, nDCG@10** per mode in a single run, plus the first-relevant
+  rank per query — the hybrid lift is the README headline number.
+- Metrics are **doc-level**: rankings come back chunk-level, so ranked docIds are
+  deduplicated by first occurrence before scoring (otherwise one document's chunks occupy
+  several ranks and DCG can exceed the ideal DCG).
+- `--gate` enforces minimum thresholds on hybrid (defaults: Recall@5 ≥ 0.90, MRR@10 ≥ 0.85,
+  nDCG@10 ≥ 0.85 — deliberately below measured values; a gate catches regressions, it isn't
+  a leaderboard) and exits non-zero on breach. `--markdown` renders the table + verdicts for
+  the GitHub step summary; `--json` dumps everything, per-query detail included.
+- CI: `.github/workflows/eval.yml` boots the real stack, seeds the corpus through the async
+  pipeline (`scripts/seed_corpus.py` polls ES until all docs are searchable), then runs the
+  gate on every retrieval-affecting PR.
 
 ## RAG QA eval (groundedness)
 
