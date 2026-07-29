@@ -98,26 +98,29 @@ Measured end-to-end on the running stack over a 24-document technical corpus wit
 gold set (exact-term, paraphrased, and Korean cross-lingual), via
 [`eval/run_eval.py`](eval/run_eval.py) — doc-level metrics (chunk hits deduplicated by first
 occurrence; re-measured after correcting the metric, which previously let one document's
-chunks occupy several ranks):
+chunks occupy several ranks). All rows measured on the **BBQ-quantized index** (1-bit
+RaBitQ vectors + oversampled rescoring, ADR 0009):
 
 | mode | Recall@5 | Recall@10 | MRR@10 | nDCG@10 |
 |---|:---:|:---:|:---:|:---:|
-| BM25-only | 0.70 | 0.80 | 0.65 | 0.69 |
-| vector-only | 1.00 | 1.00 | 0.88 | 0.91 |
-| **hybrid (RRF + cross-encoder)** | **1.00** | **1.00** | **0.93** | **0.95** |
-| hybrid, `rerank=m3` (tri-modal self-hybrid) | 1.00 | 1.00 | 0.88 | 0.91 |
-| `mode=hyde` (hypothetical-doc kNN, no rerank) | 1.00 | 1.00 | 0.75 | 0.82 |
+| BM25-only | 0.70 | 0.80 | 0.67 | 0.70 |
+| vector-only | 1.00 | 1.00 | 0.90 | 0.93 |
+| **hybrid (RRF + cross-encoder)** | **1.00** | **1.00** | **0.95** | **0.96** |
+| hybrid, `rerank=m3` (tri-modal self-hybrid) | 1.00 | 1.00 | 0.90 | 0.93 |
+| `mode=hyde` (hypothetical-doc kNN, no rerank) | 0.90 | 1.00 | 0.80 | 0.85 |
 
-Hybrid lifts Recall@5 by **+0.30 over BM25** and MRR@10 from 0.65 to **0.93**: exact-term
+Hybrid lifts Recall@5 by **+0.30 over BM25** and MRR@10 from 0.67 to **0.95**: exact-term
 queries favor BM25, paraphrased/Korean queries favor dense vectors, and RRF + the
 cross-encoder reranker combine both — both Korean cross-lingual queries are BM25 misses but
-hybrid rank 1.
+hybrid rank 1. Quantization is quality-neutral here: the same sweep on the float32 index
+scored within ±0.02 on every dense mode (the oversampled rescore walks a wider candidate
+set, which slightly *helped* ordering).
 
 The paper-mode rows (ADR 0008) are the harness discriminating, not a leaderboard of wins:
 the M3 self-hybrid trades **−0.05 MRR for dropping the second model from memory**; HyDE
-recovers every document BM25 misses (Recall@5 0.70 → 1.00) with **zero-shot kNN alone**,
-but without a rerank stage its ordering is looser — which is exactly why the cross-encoder
-hybrid stays the default.
+recovers what BM25 misses with **zero-shot kNN alone**, but its hypothetical passage varies
+run to run (generation-dependent) and without a rerank stage its ordering is looser — which
+is exactly why the cross-encoder hybrid stays the default.
 
 ### Eval as a CI regression gate
 
@@ -144,6 +147,8 @@ way everything else was: implemented, swept by the eval harness, numbers publish
 | **M3 tri-modal self-hybrid** (dense + sparse + ColBERT) | *BGE M3-Embedding*, Chen et al., 2024 | `/api/search?rerank=m3` — the embedder's own sparse + multi-vector heads as an alternative rerank stage, no extra model |
 | **HyDE** (hypothetical document embeddings) | Gao et al., ACL 2023 | `/api/search?mode=hyde` — CHEAP-tier LLM writes a hypothetical answer passage, its embedding retrieves; fail-open to vector search |
 | Post-hoc LLM-judge grading | LLM-as-judge line of work | groundedness guardrail (ADR 0004) |
+| **Sufficient-context gate** | Joren et al., **ICLR 2025** | pre-generation autorater: low-confidence retrievals get a CHEAP-tier "can these passages answer this?" check — insufficient → abstain **before** the PRIMARY generation (ADR 0009) |
+| **RaBitQ 1-bit quantization** (ES **BBQ**, GA 2025) | Gao & Long, **SIGMOD 2024** | `bbq_hnsw` on the embedding field + `rescore_vector` oversampling — ~32× less HNSW vector memory, recall retention proven by the CI gate (ADR 0009) |
 
 GraphRAG / RAPTOR (corpus-global questions) and late chunking (long-document corpora)
 were evaluated and deliberately deferred — the rejection reasoning is in ADR 0008.
@@ -171,7 +176,7 @@ sub-second territory.
 
 - **Backend:** Java 21, Spring Boot, WebFlux (SSE)
 - **LLM:** pluggable via `recall.llm.provider` — Claude (`com.anthropic:anthropic-java`, default), or OpenAI-compatible Groq / Ollama (local, free, no key)
-- **Search / vector:** Elasticsearch (Nori analyzer + `dense_vector` kNN)
+- **Search / vector:** Elasticsearch 8.18 (Nori analyzer + `dense_vector` kNN, BBQ-quantized with oversampled rescoring)
 - **Embedding / rerank:** `BAAI/bge-m3` + `BAAI/bge-reranker-v2-m3` (Python FastAPI sidecar)
 - **Messaging:** Kafka (async ingestion)
 - **Stores:** Redis (semantic cache, locks), PostgreSQL (query/cost log), MinIO/S3 (raw-doc archive + claim check)
@@ -199,7 +204,7 @@ running locally) — see [Configuration](#configuration).
 | Method | Path | Notes |
 |---|---|---|
 | `GET` | `/api/search?q=&mode=&rerank=` | `mode` = `hybrid` (default) `\|` `bm25` `\|` `vector` `\|` `hyde`; `rerank` (hybrid only) = `cross-encoder` (default) `\|` `m3` (ADR 0008) |
-| `GET` | `/api/ask?q=` | SSE stream: `sources`, `token`, `judging`, `groundedness`, `done`; grounded answer with `[n]` citations |
+| `GET` | `/api/ask?q=` | SSE stream: `sources`, `sufficiency`, `token`, `judging`, `groundedness`, `done`; grounded answer with `[n]` citations |
 | `POST` | `/api/ingest` | async index a document; `202` ⇒ raw doc archived + broker-acked (ADR 0005) |
 | `GET` | `/api/admin/dlq?limit=` | DLQ depth + bounded peek with decoded forensic headers (ADR 0006) |
 | `POST` | `/api/admin/dlq/replay?max=` | drain pending DLQ records back onto the ingestion topic (ADR 0006) |
@@ -215,15 +220,25 @@ LLM provider is selected by `recall.llm.provider` (env `LLM_PROVIDER`):
 | `groq` | free tier | `GROQ_API_KEY`, OpenAI-compatible |
 | `ollama` | free / local | no key; `OLLAMA_MODEL` (e.g. `qwen2.5-coder:3b`) |
 
-### Groundedness guardrail
+### Groundedness guardrails — before and after generation
 
-Every generated answer is graded **after** it streams (so TTFT is unaffected) by a post-hoc
-LLM-judge on the cheap model tier: the judge sees the same passages plus the finished answer
-and returns `SUPPORTED` / `PARTIAL` / `UNSUPPORTED`. The verdict streams to the UI as a badge,
-lands on the `query_log` row, and feeds Prometheus (`recall_rag_groundedness`,
-`recall_rag_judge_verdicts_total`) — so "groundedness %" is a dashboard number, not a claim.
-The judge is fail-open (timeout/error → answer unaffected) and abstentions ("I don't know")
-are never graded as hallucinations. Design: [ADR 0004](docs/adr/0004-groundedness-guardrail.md).
+Hallucination is guarded on both sides of the LLM call, and both guards are fail-open:
+
+**Before (sufficiency gate, ADR 0009 / ICLR 2025):** when the reranker's top score is below
+`RAG_SUFFICIENCY_CONFIDENCE_THRESHOLD`, a CHEAP-tier autorater answers one word — can these
+passages answer this question? `INSUFFICIENT` → the pipeline abstains *before* spending the
+PRIMARY generation (a `sufficiency` SSE event + amber badge in the UI, and the cheapest
+possible "I don't know"). Confident retrievals skip the check entirely, so p50 TTFT is
+untouched. Metered as `recall_rag_sufficiency_{skips,verdicts}_total`.
+
+**After (post-hoc judge, ADR 0004):** every generated answer is graded after it streams (so
+TTFT is unaffected) by a CHEAP-tier judge that sees the same passages plus the finished
+answer and returns `SUPPORTED` / `PARTIAL` / `UNSUPPORTED`. The verdict streams to the UI as
+a badge, lands on the `query_log` row, and feeds Prometheus (`recall_rag_groundedness`,
+`recall_rag_judge_verdicts_total`) — "groundedness %" is a dashboard number, not a claim.
+Abstentions are never graded as hallucinations, and judged-`UNSUPPORTED` answers are never
+cached. Design: [ADR 0004](docs/adr/0004-groundedness-guardrail.md),
+[ADR 0009](docs/adr/0009-sufficient-context-bbq.md).
 
 ### Ingestion reliability
 
@@ -289,6 +304,7 @@ docker-compose.yml
 - [ADR 0006 — DLQ replay: consumer-group drain on the admin surface](docs/adr/0006-dlq-replay-admin.md)
 - [ADR 0007 — Retrieval eval as a CI regression gate](docs/adr/0007-eval-ci-regression-gate.md)
 - [ADR 0008 — Paper-backed retrieval: M3 tri-modal self-hybrid & HyDE](docs/adr/0008-paper-backed-retrieval-m3-hyde.md)
+- [ADR 0009 — 2025-paper adoption: sufficiency gate & BBQ-quantized vectors](docs/adr/0009-sufficient-context-bbq.md)
 
 ## 한국어 요약
 
