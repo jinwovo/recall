@@ -1,0 +1,27 @@
+# Overrides for the CI eval gate (.github/workflows/eval.yml):
+#   docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile full up -d --build --wait ...
+#
+# - The HF model cache becomes a bind mount so actions/cache can persist ~4.6 GB of
+#   bge-m3 + reranker weights between runs (falls back to the named volume locally).
+# - backend and embedding-service get healthchecks so `up --wait` blocks until the API
+#   answers and the models are actually loaded — the seeding step needs both.
+services:
+  embedding-service:
+    volumes:
+      - ${HF_CACHE_DIR:-hf-cache}:/root/.cache/huggingface
+    healthcheck:
+      # uvicorn only accepts connections after the lifespan hook loaded both models.
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 84            # generous: first run downloads model weights
+      start_period: 60s
+
+  backend:
+    healthcheck:
+      # Overall health is UP only once ES / Redis / Postgres indicators pass.
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s

@@ -1,0 +1,81 @@
+name: eval
+
+# Retrieval-quality regression gate (docs/adr/0007): boots the real stack (ES + Nori,
+# bge-m3 sidecar, Kafka ingestion), seeds the eval corpus through the async pipeline,
+# and fails the build if hybrid retrieval drops below the thresholds in run_eval.py.
+# Heavier than unit CI, so it only runs when retrieval-affecting paths change.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "embedding-service/**"
+      - "infra/**"
+      - "eval/**"
+      - "scripts/seed_corpus.py"
+      - "docker-compose.yml"
+      - "docker-compose.ci.yml"
+      - ".github/workflows/eval.yml"
+  pull_request:
+    paths:
+      - "backend/**"
+      - "embedding-service/**"
+      - "infra/**"
+      - "eval/**"
+      - "scripts/seed_corpus.py"
+      - "docker-compose.yml"
+      - "docker-compose.ci.yml"
+      - ".github/workflows/eval.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: eval-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  retrieval-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore HF model cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-models-bge-m3-plus-reranker-v2-m3-v1
+
+      - name: Start stack (build + health-gated)
+        run: >
+          HF_CACHE_DIR="$HOME/.cache/huggingface"
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile full
+          up -d --build --wait backend embedding-service minio
+
+      - name: Seed corpus through the async pipeline (indexing barrier)
+        run: python3 scripts/seed_corpus.py eval/corpus.jsonl --timeout 420
+
+      - name: Run gated retrieval eval
+        run: >
+          python3 eval/run_eval.py eval/gold.jsonl --gate
+          --json eval-results.json --markdown eval-summary.md
+
+      - name: Publish step summary
+        if: always()
+        run: if [ -f eval-summary.md ]; then cat eval-summary.md >> "$GITHUB_STEP_SUMMARY"; fi
+
+      - name: Upload eval results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: |
+            eval-results.json
+            eval-summary.md
+          if-no-files-found: ignore
+
+      - name: Dump service logs on failure
+        if: failure()
+        run: >
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile full
+          logs --tail 300 backend embedding-service elasticsearch kafka
