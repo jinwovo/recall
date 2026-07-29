@@ -17,8 +17,8 @@ type Chunk = {
 
 type Groundedness = { verdict: "SUPPORTED" | "PARTIAL" | "UNSUPPORTED"; score: number };
 
-type Mode = "hybrid" | "bm25" | "vector";
-const MODES: Mode[] = ["hybrid", "bm25", "vector"];
+type Mode = "hybrid" | "bm25" | "vector" | "hyde";
+const MODES: Mode[] = ["hybrid", "bm25", "vector", "hyde"];
 
 /** Ask pipeline stages, driven by the SSE events (sources → token → judging → done). */
 type Stage = "idle" | "retrieving" | "generating" | "verifying" | "done";
