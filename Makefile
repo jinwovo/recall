@@ -1,4 +1,4 @@
-.PHONY: up down logs backend frontend seed seed-corpus eval eval-gate loadtest
+.PHONY: up down logs backend frontend seed seed-corpus eval eval-gate eval-sweep loadtest
 
 up:            ## start infra (ES, Redis, Postgres, Kafka, MinIO, sidecar, Prometheus, Grafana)
 	docker compose up -d
@@ -26,6 +26,9 @@ eval:          ## run the retrieval eval harness
 
 eval-gate:     ## run the gated retrieval eval (same thresholds as CI, docs/adr/0007)
 	cd eval && python run_eval.py gold.jsonl --gate
+
+eval-sweep:    ## full sweep incl. experimental paper modes (hyde needs an LLM provider)
+	cd eval && python run_eval.py gold.jsonl --modes bm25,vector,hybrid,hybrid-m3,hyde
 
 loadtest:      ## run the k6 search load test
 	k6 run load-test/search.js
