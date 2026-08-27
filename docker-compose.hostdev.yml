@@ -1,0 +1,41 @@
+# Overrides for running the backend on the host against in-compose infrastructure:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.hostdev.yml up -d \
+#       elasticsearch redis postgres kafka minio embedding-service
+#   cd backend && REDIS_PORT=6383 POSTGRES_PORT=5437 ./gradlew bootRun
+#
+# The base file deliberately keeps Redis and Postgres off the host network — in-compose the
+# backend reaches them by service name and a published port is just exposure. But the
+# documented dev loop runs the backend with `gradlew bootRun`, which cannot see them at all,
+# so this override publishes both.
+#
+# Ports follow the workspace registry rather than the defaults: 6379-6382 and 5432-5436 are
+# already claimed by sibling projects, and a container that steals a neighbour's port fails
+# in a way that looks like a bug in whichever project is started second.
+services:
+  redis:
+    ports: ["6383:6379"]
+
+  postgres:
+    ports: ["5437:5432"]
+
+  embedding-service:
+    environment:
+      # Pin the per-request thread count so concurrent callers do not oversubscribe the
+      # machine. Torch defaults to one thread per core, so N in-flight requests each spawn
+      # a full-width pool and the cores thrash: measured on a 10-core host, raising the
+      # ingestion consumer from 1 thread to 3 *lowered* indexing from 17 to 10 documents a
+      # minute while CPU went from 207% to 617%. Three threads per request times three
+      # consumers fits the box.
+      OMP_NUM_THREADS: "3"
+      MKL_NUM_THREADS: "3"
+      TORCH_NUM_THREADS: "3"
+    # Model weights live in the named volume; the first start after a cold cache downloads
+    # ~6 GB, every later one loads from disk. uvicorn only accepts connections once the
+    # lifespan hook has both models in memory, so health is a real readiness signal.
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 60
+      start_period: 30s

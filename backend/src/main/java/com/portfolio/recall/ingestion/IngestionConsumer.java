@@ -46,7 +46,22 @@ public class IngestionConsumer {
         this.meters = meters;
     }
 
-    @KafkaListener(topics = "${recall.kafka.ingestion-topic}", groupId = "recall-ingestion")
+    /**
+     * One listener thread per configured concurrency, capped in practice by the topic's
+     * partition count (3, see {@code KafkaTopicConfig}).
+     *
+     * <p>The work here is dominated by a blocking call to the embedding sidecar, and that
+     * sidecar is a synchronous FastAPI endpoint — so requests from separate listener threads
+     * run in parallel in its worker pool rather than queueing. A single consumer therefore
+     * leaves most of the machine idle: seeding a 5,183-document benchmark measured ~17
+     * documents/minute at concurrency 1, with the sidecar using two cores out of ten.
+     *
+     * <p>Default stays 1 so a small deployment behaves exactly as before; raise it for bulk
+     * ingestion. Ordering is unaffected — chunk upserts are idempotent by content hash
+     * (docs/adr/0003), so per-partition ordering was never something this consumer relied on.
+     */
+    @KafkaListener(topics = "${recall.kafka.ingestion-topic}", groupId = "recall-ingestion",
+            concurrency = "${recall.kafka.consumer-concurrency:1}")
     public void onMessage(String payload) {
         IngestionEvent event = parse(payload);
         String content = resolveContent(event);

@@ -51,6 +51,7 @@ recall:
     ingestion-dlq-topic: ${KAFKA_INGESTION_DLQ_TOPIC:recall.ingestion.dlq}
     retry-max-attempts: ${KAFKA_RETRY_MAX_ATTEMPTS:3}     # retries after the first delivery
     retry-backoff-ms: ${KAFKA_RETRY_BACKOFF_MS:1000}      # initial backoff; doubles per retry
+    consumer-concurrency: ${KAFKA_CONSUMER_CONCURRENCY:1}  # listener threads; capped by partitions (3)
   storage:                     # raw-doc archive + claim check (docs/adr/0005)
     endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
     access-key: ${MINIO_ACCESS_KEY:minioadmin}

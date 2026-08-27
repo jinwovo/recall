@@ -61,3 +61,6 @@ frontend/demo-video/
 # The SciFact corpus alone is 8 MB, and the cache holds the raw pages it was built from.
 eval/.beir-cache/
 eval/beir-*/
+
+# Host-run backend log (docker-compose.hostdev.yml flow).
+backend-run.log

@@ -19,9 +19,13 @@ public record RecallProperties(
 
     public record Embedding(String serviceUrl, int dim) {}
 
-    /** Ingestion topic + failure policy: bounded exponential retries, then dead-letter (docs/adr/0005). */
+    /**
+     * Ingestion topic + failure policy: bounded exponential retries, then dead-letter
+     * (docs/adr/0005). consumerConcurrency is listener threads, capped by partition count.
+     */
     public record Kafka(String ingestionTopic, String ingestionDlqTopic,
-                        int retryMaxAttempts, long retryBackoffMs) {}
+                        int retryMaxAttempts, long retryBackoffMs,
+                        int consumerConcurrency) {}
 
     public record SemanticCache(double threshold) {}
 

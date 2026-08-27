@@ -40,7 +40,7 @@ class SearchServiceHydeTest {
         RecallProperties props = new RecallProperties(
                 new RecallProperties.Elasticsearch("http://localhost:9200", "recall-docs"),
                 new RecallProperties.Embedding("http://localhost:8000", 4),
-                new RecallProperties.Kafka("t", "t.dlq", 3, 100),
+                new RecallProperties.Kafka("t", "t.dlq", 3, 100, 1),
                 new RecallProperties.SemanticCache(0.95),
                 new RecallProperties.Retrieval(50, 8, 60),
                 new RecallProperties.Models("primary", "balanced", "cheap"),
