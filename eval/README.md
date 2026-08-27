@@ -2,15 +2,34 @@
 
 Measures retrieval quality so improvements are **numbers, not vibes** (docs/adr/0001),
 enforces them in CI so regressions are **build failures, not surprises** (docs/adr/0007),
-and reports them with the inference that makes a number a claim rather than an anecdote
-(docs/adr/0011).
+reports them with the inference that makes a number a claim rather than an anecdote
+(docs/adr/0011), and turns the two constants that decide cost and hallucination into
+calibrated certificates (docs/adr/0013).
+
+Standard library only, so the composite action external repos run needs no install step.
+The one exception is `plot_anytime.py`, which draws documentation and gates nothing.
+
+| file | what it is |
+|---|---|
+| `run_eval.py` | the harness and the CI gate — four policies, intervals, significance |
+| `stats.py` | BCa bootstrap, exact binomial, paired randomization test, Holm, design analysis |
+| `sequential.py` | anytime-valid confidence sequences; the early-stopping gate (ADR 0012) |
+| `conformal.py` | coverage and risk guarantees (ADR 0013) |
+| `calibrate.py` | drives the API and writes the certificate + config to paste |
+| `power_report.py` | what a gold set can resolve, from the labels alone |
+| `beir.py` | fetch a BEIR benchmark into this repo's format (ADR 0014) |
+| `tune.py` | the nightly sweep, with the four guards that stop it selecting noise |
+| `anytime_experiment.py` | reproduces the ADR-0012 tables; `plot_anytime.py` draws them |
+| `_mock_reranker.py` | a stand-in `/api/search`, so the tests need no stack |
 
 ```bash
 python run_eval.py gold.jsonl                                  # comparison table + intervals
 python run_eval.py gold.jsonl --gate                           # CI mode: exit 1 on regression
+python run_eval.py gold.jsonl --gate --gate-policy sequential  # stop when decided
 python run_eval.py gold.jsonl --json out.json --markdown summary.md
-python run_eval.py gold.jsonl --gate --gate-policy sequential   # stop when decided
 python power_report.py gold.jsonl                              # what this gold set can resolve
+python calibrate.py gold.jsonl                                 # certify context size + abstention
+python beir.py scifact                                         # 5,183 docs, 300 queries
 python anytime_experiment.py                                   # reproduce the ADR-0012 tables
 python -m unittest discover -s . -p "test_*.py"                # test the harness itself
 # RECALL_API=http://localhost:18080 python run_eval.py gold.jsonl
@@ -192,3 +211,52 @@ Reports per query and in summary:
 
 Cache hits are reported separately (cached answers skip the judge). Requires the stack up
 and an LLM provider configured — the free local `ollama` provider works.
+
+## Certified thresholds — `calibrate.py`
+
+The serving path had two hand-picked constants: how many passages reach the LLM, and when
+to answer at all. `calibrate.py` replaces both with thresholds carrying finite-sample,
+distribution-free guarantees, from a single pass over the gold set and no extra labelling
+([ADR 0013](../docs/adr/0013-conformal-risk-control.md)):
+
+```bash
+python calibrate.py gold.jsonl --json ../calibration.json
+python calibrate.py beir-scifact/gold.jsonl --alpha 0.05 --risk-alpha 0.02
+```
+
+- **Coverage** — split conformal prediction with adaptive set sizes. Keep the shortest
+  prefix of the reranked list whose exclusive cumulative mass stays under a calibrated
+  quantile, so `P(context contains a relevant passage) >= 1 - alpha` on the next query.
+  Confident retrievals get a short prompt; ambiguous ones get a long enough one to keep the
+  promise.
+- **Risk** — risk-controlling prediction sets with fixed-sequence testing, bounding the
+  probability of answering from context with no relevant document in it, at confidence
+  `1 - delta`. A certificate that abstains on everything is valid, useless, and labelled
+  **degenerate**; a stalled walk names the calibration size that would settle it.
+
+Three splits: one picks the softmax temperature, one fits the quantile, one scores both
+having informed neither. That is not ceremony — the right temperature depends entirely on
+the scale the reranker head emits, and at the wrong one the guarantee still holds while the
+entire benefit disappears.
+
+Output is the exact YAML to paste. The serving side is `ConformalSetSizer` (Java), and its
+agreement with this calibrator is what makes the certificate mean anything —
+`ConformalSetSizerTest` pins the two against golden vectors generated here.
+
+## Benchmark scale — `beir.py`
+
+```bash
+python beir.py --list
+python beir.py scifact                      # 5,183 documents, 300 queries -> beir-scifact/
+python beir.py nfcorpus --max-queries 100
+```
+
+Converts a [BEIR](https://github.com/beir-cellar/beir) dataset into this repo's corpus and
+gold format, standard library only. SciFact is the default because its judgements are
+binary, so the metrics computed here mean the same thing as the published ones; graded
+datasets print a warning that their binarised nDCG is not comparable
+([ADR 0014](../docs/adr/0014-beir-benchmark-scale.md)).
+
+Downloads are cached and resumable — paging 5,000 documents rate-limits partway through —
+and everything dropped in conversion is counted: judgements pointing outside the corpus,
+queries left with none, empty documents.
