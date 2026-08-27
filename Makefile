@@ -27,8 +27,8 @@ ingest:        ## ingest your own documents: make ingest DIR=~/my-docs
 eval:          ## run the retrieval eval harness
 	cd eval && python run_eval.py queries.example.jsonl
 
-eval-gate:     ## run the gated retrieval eval (same thresholds as CI, docs/adr/0007)
-	cd eval && python run_eval.py gold.jsonl --gate
+eval-gate:     ## gated retrieval eval; GATE_POLICY=point|ci-lower|regression|sequential
+	cd eval && python run_eval.py $(or $(GOLD),gold.jsonl) --gate --gate-policy $(or $(GATE_POLICY),point) $(if $(filter sequential,$(GATE_POLICY)),--modes hybrid,)
 
 eval-sweep:    ## full sweep incl. experimental paper modes (hyde needs an LLM provider)
 	cd eval && python run_eval.py gold.jsonl --modes bm25,vector,hybrid,hybrid-m3,hyde
