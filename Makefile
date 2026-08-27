@@ -1,4 +1,4 @@
-.PHONY: up down logs backend frontend seed seed-corpus ingest eval eval-gate eval-sweep loadtest
+.PHONY: up down logs backend frontend seed seed-corpus ingest eval eval-gate eval-sweep eval-test eval-stats loadtest
 
 up:            ## start infra (ES, Redis, Postgres, Kafka, MinIO, sidecar, Prometheus, Grafana)
 	docker compose up -d
@@ -32,6 +32,12 @@ eval-gate:     ## run the gated retrieval eval (same thresholds as CI, docs/adr/
 
 eval-sweep:    ## full sweep incl. experimental paper modes (hyde needs an LLM provider)
 	cd eval && python run_eval.py gold.jsonl --modes bm25,vector,hybrid,hybrid-m3,hyde
+
+eval-test:     ## unit-test the eval harness itself — no stack needed (docs/adr/0011)
+	python -m unittest discover -s eval -p "test_*.py" -v
+
+eval-stats:    ## what the current gold set can and cannot resolve, before running anything
+	cd eval && python power_report.py gold.jsonl
 
 loadtest:      ## run the k6 search load test
 	k6 run load-test/search.js

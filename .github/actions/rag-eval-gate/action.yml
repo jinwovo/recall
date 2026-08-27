@@ -1,8 +1,10 @@
 name: "RAG eval gate"
 description: >-
   Gate pull requests on retrieval quality: doc-level Recall@5/@10, MRR@10 and nDCG@10
-  against your gold set, with a mode-comparison table and per-query ranks in the step
-  summary. Optionally seeds a corpus first and waits for async indexing to converge.
+  against your gold set — each with a 95% interval, each mode significance-tested against
+  the baseline, and a statement of what your gold set can resolve at all. Three gate
+  policies including a paired regression test against a recorded run. Optionally seeds a
+  corpus first and waits for async indexing to converge.
 author: jinwovo
 branding:
   icon: check-circle
@@ -33,6 +35,23 @@ inputs:
   gate-mode:
     description: Mode the thresholds apply to
     default: "hybrid"
+  gate-policy:
+    description: >-
+      point (measured >= threshold), ci-lower (95% lower bound >= threshold), or
+      regression (also fail on a statistically significant paired drop vs baseline-json)
+    default: "point"
+  baseline-json:
+    description: >-
+      A previous run's results JSON, for gate-policy=regression. The paired test compares
+      per-query scores against it, so a real regression is caught even when the mean still
+      clears the threshold. Commit it, or restore it from the last green run's artifact.
+    default: ""
+  baseline-mode:
+    description: Mode the significance tests compare against (default: first swept mode)
+    default: ""
+  bootstrap-iters:
+    description: Resampling draws for intervals and Monte Carlo p-values
+    default: "10000"
   min-recall5:
     default: "0.90"
   min-mrr10:
@@ -56,12 +75,29 @@ runs:
       shell: bash
       env:
         RECALL_API: ${{ inputs.api-url }}
-      run: >
-        python3 "${{ github.action_path }}/run_eval.py" "${{ inputs.gold-file }}"
-        --gate --gate-mode "${{ inputs.gate-mode }}" --modes "${{ inputs.modes }}"
-        --min-recall5 "${{ inputs.min-recall5 }}" --min-mrr10 "${{ inputs.min-mrr10 }}"
-        --min-ndcg10 "${{ inputs.min-ndcg10 }}"
-        --json rag-eval-results.json --markdown rag-eval-summary.md
+      run: |
+        set -euo pipefail
+        args=(
+          "${{ github.action_path }}/run_eval.py" "${{ inputs.gold-file }}"
+          --gate --gate-mode "${{ inputs.gate-mode }}"
+          --gate-policy "${{ inputs.gate-policy }}"
+          --modes "${{ inputs.modes }}"
+          --bootstrap-iters "${{ inputs.bootstrap-iters }}"
+          --min-recall5 "${{ inputs.min-recall5 }}"
+          --min-mrr10 "${{ inputs.min-mrr10 }}"
+          --min-ndcg10 "${{ inputs.min-ndcg10 }}"
+          --json rag-eval-results.json --markdown rag-eval-summary.md
+        )
+        # Optional inputs: an empty default must not become an empty argument. Written as
+        # `if` rather than `[ -n x ] && ...` because under `set -e` a false test is a
+        # non-zero status that would abort the step.
+        if [ -n "${{ inputs.baseline-mode }}" ]; then
+          args+=(--baseline-mode "${{ inputs.baseline-mode }}")
+        fi
+        if [ -n "${{ inputs.baseline-json }}" ]; then
+          args+=(--baseline-json "${{ inputs.baseline-json }}")
+        fi
+        python3 "${args[@]}"
 
     - name: Publish step summary
       if: ${{ always() }}

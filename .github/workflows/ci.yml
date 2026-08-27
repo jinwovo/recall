@@ -57,11 +57,25 @@ jobs:
       - run: helm lint deploy/helm/recall
       - run: helm template recall deploy/helm/recall > /dev/null
 
-  # The rag-eval-gate action vendors run_eval.py / seed_corpus.py so external repos get a
-  # self-contained action — this guard fails the build if the copies drift from canonical.
+  # The eval harness gates every retrieval PR, so it is production code and is unit-tested
+  # like production code: the statistical layer against closed forms and SciPy, the harness
+  # against a stubbed search backend with hand-derivable metrics (docs/adr/0011). Standard
+  # library only — no install step, same constraint the composite action runs under.
+  eval-harness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m unittest discover -s eval -p "test_*.py" -v
+
+  # The rag-eval-gate action vendors run_eval.py / stats.py / seed_corpus.py so external
+  # repos get a self-contained action — this guard fails the build if a copy drifts.
   action-sync:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: diff eval/run_eval.py .github/actions/rag-eval-gate/run_eval.py
+      - run: diff eval/stats.py .github/actions/rag-eval-gate/stats.py
       - run: diff scripts/seed_corpus.py .github/actions/rag-eval-gate/seed_corpus.py
