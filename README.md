@@ -204,23 +204,45 @@ correct behaviour. → [ADR 0011](docs/adr/0011-statistical-inference-eval.md)
 
 ## Use the eval gate in your own repo
 
-The harness ships as a composite action. Point it at anything that speaks
-`GET /api/search?q=&mode=` and a JSONL gold set:
+Everything above is available on its own, because none of it is specific to this system:
+
+```bash
+pip install rag-eval-gate
+rag-eval-gate power gold.jsonl        # what your gold set can resolve, before anything runs
+```
+
+→ **[jinwovo/rag-eval-gate](https://github.com/jinwovo/rag-eval-gate)** — zero dependencies,
+and backend-agnostic in a way this repo's own harness is not: an HTTP URL template with a
+field map, a command printing JSON to stdout (so the retriever's language is irrelevant), or
+a TREC run file (so a corpus can be ranked once, offline, and evaluated with nothing
+running). Gold sets are JSONL or TREC qrels.
+
+```yaml
+- uses: jinwovo/rag-eval-gate@v1
+  with:
+    gold-file: eval/gold.jsonl
+    url-template: 'http://localhost:8080/api/search?q={query}&mode={mode}'
+    gate-policy: sequential            # point | ci-lower | regression | sequential
+    min-mrr10: "0.85"
+```
+
+This repo keeps its own vendored copy for the in-tree gate, which also seeds a corpus
+through the Kafka pipeline and waits for async indexing to converge — something a general
+tool has no business knowing about:
 
 ```yaml
 - uses: jinwovo/recall/.github/actions/rag-eval-gate@main
   with:
     api-url: http://localhost:8080
     gold-file: eval/gold.jsonl
-    corpus-file: eval/corpus.jsonl     # optional: seed + wait for async indexing first
-    gate-policy: sequential            # point | ci-lower | regression | sequential
-    min-mrr10: "0.85"
+    corpus-file: eval/corpus.jsonl     # seed + wait for async indexing first
+    gate-policy: sequential
 ```
 
-You get a 95% interval on every metric, each mode significance-tested against the baseline
-with Holm correction, a statement of what your gold set can resolve at all, and a
-`✅ PASS` / `❌ FAIL` in the step summary. Our own eval workflow consumes exactly this action
-— dogfooding is the compatibility test.
+Either way you get a 95% interval on every metric, each mode significance-tested against the
+baseline with Holm correction, a statement of what your gold set can resolve at all, and a
+`✅ PASS` / `❌ FAIL` in the step summary. Our own eval workflow consumes the in-tree action —
+dogfooding is the compatibility test.
 
 | `gate-policy` | fails when | use it when |
 |---|---|---|

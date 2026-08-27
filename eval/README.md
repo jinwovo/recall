@@ -9,6 +9,16 @@ calibrated certificates (docs/adr/0013).
 Standard library only, so the composite action external repos run needs no install step.
 The one exception is `plot_anytime.py`, which draws documentation and gates nothing.
 
+> **This layer is also a standalone package**:
+> [`pip install rag-eval-gate`](https://github.com/jinwovo/rag-eval-gate). The package is
+> the supported way to use any of it outside this repository — it is backend-agnostic
+> (HTTP / a command / a TREC run file) where the files here assume this system's
+> `/api/search`, and it takes TREC qrels as well as JSONL. What stays here is the
+> development home and the pieces that know about *this* pipeline: seeding through Kafka,
+> the nightly tuner, the BEIR converter, and the experiment that produces the ADR-0012
+> figure. The two are kept in step by hand, not by a shared import, so a change worth
+> having in both has to be made in both.
+
 | file | what it is |
 |---|---|
 | `run_eval.py` | the harness and the CI gate — four policies, intervals, significance |
