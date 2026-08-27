@@ -23,6 +23,16 @@ spring:
     consumer:
       group-id: recall-ingestion
       auto-offset-reset: earliest
+      # A poll batch must finish inside max-poll-interval-ms or the broker evicts the
+      # consumer, the group rebalances, and every record since the last commit is
+      # delivered again. Ingestion embeds each document through a model, so a record
+      # costs seconds, not microseconds: at the 500-record default a batch needs ~40
+      # minutes against a 5-minute deadline, and the consumer reprocesses the same
+      # prefix forever while making visible progress in the logs. Invisible on a
+      # 24-document corpus; fatal on a 5,183-document benchmark.
+      max-poll-records: ${KAFKA_MAX_POLL_RECORDS:10}
+      properties:
+        max.poll.interval.ms: ${KAFKA_MAX_POLL_INTERVAL_MS:600000}
     producer:
       acks: all
 

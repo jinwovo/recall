@@ -51,7 +51,7 @@ inputs:
       clears the threshold. Commit it, or restore it from the last green run's artifact.
     default: ""
   baseline-mode:
-    description: Mode the significance tests compare against (default: first swept mode)
+    description: "Mode the significance tests compare against (default: first swept mode)"
     default: ""
   bootstrap-iters:
     description: Resampling draws for intervals and Monte Carlo p-values
