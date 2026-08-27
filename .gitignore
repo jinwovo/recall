@@ -56,3 +56,8 @@ Thumbs.db
 
 # ---- demo recording scratch (GIF source videos) ----
 frontend/demo-video/
+
+# BEIR benchmark downloads and conversions — regenerate with `make beir` (eval/beir.py).
+# The SciFact corpus alone is 8 MB, and the cache holds the raw pages it was built from.
+eval/.beir-cache/
+eval/beir-*/

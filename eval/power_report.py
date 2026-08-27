@@ -153,17 +153,26 @@ def render(shape: dict, observed: dict | None, markdown: bool) -> str:
     add("")
     ladder = p_floor_ladder(n)
     first = next((r for r in ladder if r["can_reach_significance"]), None)
+    # The ladder is only interesting where it crosses. On a 300-query set the remaining
+    # rows are all "yes" and all astronomically small, and printing them buries the point.
+    cutoff = min(len(ladder), (first["differing"] + 1) if first else len(ladder))
+    shown, rest = ladder[:cutoff], ladder[cutoff:]
     if markdown:
         add("| differing queries | floor p | can reach p < 0.05 |")
         add("|:---:|:---:|:---:|")
-        for r in ladder:
+        for r in shown:
             add(f"| {r['differing']} | {r['floor_p']:.4f} | "
                 f"{'yes' if r['can_reach_significance'] else '**no**'} |")
+        if rest:
+            add(f"| {rest[0]['differing']}–{rest[-1]['differing']} | "
+                f"{rest[-1]['floor_p']:.2e} … | yes |")
     else:
-        for r in ladder:
+        for r in shown:
             mark = "" if r["can_reach_significance"] else "   <- cannot reach significance"
-            print_row = f"  k={r['differing']:>3}  floor p = {r['floor_p']:.4f}{mark}"
-            add(print_row)
+            add(f"  k={r['differing']:>4}  floor p = {r['floor_p']:.4f}{mark}")
+        if rest:
+            add(f"  k={rest[0]['differing']:>4}..{rest[-1]['differing']}  "
+                f"floor p down to {rest[-1]['floor_p']:.2e}")
     add("")
     if first:
         k = f"**{first['differing']}**" if markdown else str(first["differing"])
