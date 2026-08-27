@@ -186,6 +186,15 @@ dMRR@10 = 0.02 at sd 0.30 needs 1,766 queries -> short by 1,466
 Thirty times the resolution, and still short of settling a two-point MRR move. Worth printing
 rather than discovering later.
 
+**No SciFact scores are published here yet, because they have not been measured yet.** The
+converter is tested and the corpus is fetched; indexing 5,183 documents through bge-m3 runs
+at ~15 documents/minute on a 10-core laptop CPU, so the measurement is an overnight job and
+is queued for a machine that can spend it. The costs, the settings that move with the
+hardware, and the exact commands are in the
+[benchmark runbook](docs/BENCHMARK-RUNBOOK.md) — including the one that matters most, which
+is that the log printing `indexed N chunks` proves nothing and the committed offset is the
+only real progress signal.
+
 → [ADR 0014](docs/adr/0014-beir-benchmark-scale.md)
 
 ### And the tuner has to prove itself now
