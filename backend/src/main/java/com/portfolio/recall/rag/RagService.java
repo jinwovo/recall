@@ -2,7 +2,6 @@ package com.portfolio.recall.rag;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.portfolio.recall.cache.SemanticCacheService;
-import com.portfolio.recall.config.RecallProperties;
 import com.portfolio.recall.embedding.EmbeddingClient;
 import com.portfolio.recall.llm.LlmClient;
 import com.portfolio.recall.llm.ModelTier;
@@ -17,9 +16,10 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 /**
- * RAG QA (docs/adr/0001, 0002, 0004, 0009): retrieve → sufficiency gate → assemble grounded
- * prompt → stream answer over SSE, then grade the finished answer with a post-hoc
- * groundedness judge. Semantic-cache short-circuit and a per-question query log included.
+ * RAG QA (docs/adr/0001, 0002, 0004, 0009, 0013): retrieve → size the context → sufficiency
+ * gate → assemble grounded prompt → stream answer over SSE, then grade the finished answer
+ * with a post-hoc groundedness judge. Semantic-cache short-circuit and a per-question query
+ * log included.
  * SSE event types: {@code sources}, {@code sufficiency}, {@code token}, {@code cache},
  * {@code judging}, {@code groundedness}, {@code done}, {@code error}.
  */
@@ -43,22 +43,23 @@ public class RagService {
     private final LlmClient llm;
     private final GroundednessJudge judge;
     private final SufficiencyCheck sufficiency;
+    private final ConformalSetSizer contextSizer;
     private final QueryLogService queryLog;
     private final ObjectMapper json;
-    private final int topK;
 
     public RagService(SearchService search, EmbeddingClient embeddings, SemanticCacheService cache,
                       LlmClient llm, GroundednessJudge judge, SufficiencyCheck sufficiency,
-                      QueryLogService queryLog, ObjectMapper json, RecallProperties props) {
+                      ConformalSetSizer contextSizer, QueryLogService queryLog,
+                      ObjectMapper json) {
         this.search = search;
         this.embeddings = embeddings;
         this.cache = cache;
         this.llm = llm;
         this.judge = judge;
         this.sufficiency = sufficiency;
+        this.contextSizer = contextSizer;
         this.queryLog = queryLog;
         this.json = json;
-        this.topK = props.retrieval().topK();
     }
 
     public Flux<ServerSentEvent<String>> ask(String query) {
@@ -83,8 +84,11 @@ public class RagService {
     private Flux<ServerSentEvent<String>> generate(String query, float[] vector, long start) {
         // Reuse the embedding from the cache key — no second embed call.
         return search.hybridWithVector(query, vector).flatMapMany(all -> {
-            // Search returns the full reranked list; keep only the top-K as LLM context.
-            List<RetrievedChunk> chunks = all.stream().limit(topK).toList();
+            // Search returns the full reranked list. How much of it becomes LLM context is
+            // decided per query by the conformal set sizer (docs/adr/0013): a confident
+            // retrieval gets a short prompt, an ambiguous one gets a long enough prompt to
+            // keep the coverage guarantee. Uncalibrated or disabled, this is topK.
+            List<RetrievedChunk> chunks = all.stream().limit(contextSizer.size(all)).toList();
 
             // Groundedness guard: no context → don't call the LLM, return the canned "I don't know".
             if (chunks.isEmpty()) {

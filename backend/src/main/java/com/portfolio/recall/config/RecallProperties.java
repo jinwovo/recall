@@ -38,16 +38,30 @@ public record RecallProperties(
         public record Ollama(String baseUrl, String model) {}
     }
 
-    /** RAG answer-quality guardrails (docs/adr/0004, 0009). */
-    public record Rag(Judge judge, Sufficiency sufficiency) {
+    /** RAG answer-quality guardrails (docs/adr/0004, 0009, 0013). */
+    public record Rag(Judge judge, Sufficiency sufficiency, Conformal conformal) {
         /** Post-hoc groundedness judge: fail-open, bounded by timeoutSeconds. */
         public record Judge(boolean enabled, int timeoutSeconds) {}
 
         /**
          * Pre-generation sufficiency gate (docs/adr/0009): runs only when the reranker's
          * top score is below confidenceThreshold; fail-open, bounded by timeoutSeconds.
+         *
+         * <p>confidenceThreshold is a calibrated number, not a guess: eval/calibrate.py
+         * chooses the most permissive value whose risk is provably bounded (docs/adr/0013),
+         * and writes the certificate alongside it.
          */
         public record Sufficiency(boolean enabled, double confidenceThreshold, int timeoutSeconds) {}
+
+        /**
+         * Adaptive context sizing with a coverage guarantee (docs/adr/0013). {@code threshold}
+         * is the conformal quantile produced by eval/calibrate.py for the configured
+         * {@code alpha}; it is only meaningful together with the {@code temperature} it was
+         * calibrated at. {@code maxK} is a hard context cap that overrides the certificate
+         * when it binds. Disabled → retrieval.topK, unchanged.
+         */
+        public record Conformal(boolean enabled, double alpha, double threshold,
+                                double temperature, int maxK) {}
     }
 
     /**

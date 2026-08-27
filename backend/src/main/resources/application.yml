@@ -75,6 +75,15 @@ recall:
       enabled: ${RAG_SUFFICIENCY_ENABLED:true}
       confidence-threshold: ${RAG_SUFFICIENCY_CONFIDENCE_THRESHOLD:0.35}   # skip check above this rerank score
       timeout-seconds: ${RAG_SUFFICIENCY_TIMEOUT_SECONDS:45}   # CPU 3B prefill needs headroom; fail-open past this
+    conformal:                 # adaptive context sizing with a coverage guarantee (docs/adr/0013)
+      # Off until calibrated: `make calibrate` runs eval/calibrate.py against a real eval
+      # result and prints the threshold to paste here. A threshold is only valid for the
+      # alpha and temperature it was calibrated at, so the three move together.
+      enabled: ${RAG_CONFORMAL_ENABLED:false}
+      alpha: ${RAG_CONFORMAL_ALPHA:0.10}          # miss the relevant passage at most 10% of the time
+      threshold: ${RAG_CONFORMAL_THRESHOLD:-1}    # -1 = uncalibrated; sizing stays off
+      temperature: ${RAG_CONFORMAL_TEMPERATURE:1.0}
+      max-k: ${RAG_CONFORMAL_MAX_K:12}            # hard context cap; overrides the certificate when it binds
   llm:                         # provider toggle: claude (default) | groq (free)
     provider: ${LLM_PROVIDER:claude}
     groq:
