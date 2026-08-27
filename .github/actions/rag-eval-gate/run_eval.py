@@ -15,16 +15,23 @@ and every mode is compared against the baseline with a paired randomization test
 p-values are Holm-corrected across the sweep (docs/adr/0011). The report also states what
 the gold set can resolve at all — on a small set that is usually the finding.
 
-Three gate policies:
+Four gate policies:
 
     point       measured >= threshold                     (default; absolute floor)
     ci-lower    lower bound of the 95% interval >= threshold
     regression  paired randomization test against --baseline-json; fails only on a
                 statistically significant drop on the same queries
+    sequential  score queries one at a time and stop the moment the verdict is settled,
+                using an anytime-valid confidence sequence (docs/adr/0012)
 
 `regression` is the sensitive one: it compares per-query scores against a recorded run
 rather than an absolute line, so a real two-query regression is caught even when the mean
 still clears the threshold.
+
+`sequential` is the cheap one: a system comfortably above the line is proven so in a
+fraction of the gold set, and a broken one fails in fewer queries still. Stopping early is
+legitimate here — and only here — because the interval it stops on is valid at every
+sample size rather than only at the last one.
 
 Usage:
     python run_eval.py gold.jsonl
@@ -32,10 +39,12 @@ Usage:
     python run_eval.py gold.jsonl --gate                              # absolute thresholds
     python run_eval.py gold.jsonl --gate --gate-policy regression \\
         --baseline-json baseline.json                                 # paired regression
+    python run_eval.py gold.jsonl --gate --gate-policy sequential     # stop when decided
 Env:
     RECALL_API (default http://localhost:8080)
 
-Stdlib only — no dependencies to install in CI. Ships `stats.py` beside it.
+Stdlib only — no dependencies to install in CI. Ships `stats.py` and `sequential.py`
+beside it.
 """
 import argparse
 import json
@@ -47,6 +56,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+import sequential
 import stats
 
 # Keep console output alive on narrow encodings (e.g. Windows cp949) — degrade, don't crash.
@@ -80,6 +90,11 @@ ALPHA = 0.05
 # What counts as a retrieval improvement worth shipping — used only for the sample-size
 # advice in the design-analysis block, never as a gate.
 TARGET_EFFECT = 0.02
+# Fixed so a sequential gate reads the gold set in the same order on every run: the shuffle
+# is there to make the prefix representative, not to add variance between builds.
+SEQUENTIAL_SEED = 1337
+# A badly broken run misses almost every query; listing them all buries the verdict.
+MAX_LISTED_MISSES = 15
 
 
 def search(query: str, mode: str, attempts: int = 3) -> list[str]:
@@ -100,35 +115,36 @@ def search(query: str, mode: str, attempts: int = 3) -> list[str]:
     raise RuntimeError(f"search failed after {attempts} attempts: {url}") from last
 
 
-def evaluate_mode(examples: list[dict], mode: str) -> dict:
-    per_query = []
-    for ex in examples:
-        gold = set(ex["relevant_doc_ids"])
-        ranked = search(ex["query"], mode)
+def score_query(example: dict, mode: str) -> dict:
+    """Retrieve for one query and score it — the unit both the batch and sequential paths use."""
+    gold = set(example["relevant_doc_ids"])
+    ranked = search(example["query"], mode)
 
-        recalls = {}
-        for k in RECALL_CUTOFFS:
-            hits = sum(1 for d in ranked[:k] if d in gold)
-            recalls[k] = hits / len(gold) if gold else 0.0
+    recalls = {}
+    for k in RECALL_CUTOFFS:
+        hits = sum(1 for d in ranked[:k] if d in gold)
+        recalls[k] = hits / len(gold) if gold else 0.0
 
-        first_hit = next((i + 1 for i, d in enumerate(ranked) if d in gold), None)
-        rr = 1.0 / first_hit if first_hit else 0.0
+    first_hit = next((i + 1 for i, d in enumerate(ranked) if d in gold), None)
+    rr = 1.0 / first_hit if first_hit else 0.0
 
-        dcg = sum(1.0 / math.log2(i + 2) for i, d in enumerate(ranked) if d in gold)
-        idcg = sum(1.0 / math.log2(i + 2) for i in range(min(len(gold), RETRIEVE_K)))
-        ndcg = dcg / idcg if idcg else 0.0
+    dcg = sum(1.0 / math.log2(i + 2) for i, d in enumerate(ranked) if d in gold)
+    idcg = sum(1.0 / math.log2(i + 2) for i in range(min(len(gold), RETRIEVE_K)))
+    ndcg = dcg / idcg if idcg else 0.0
 
-        per_query.append({
-            "query": ex["query"],
-            "gold": sorted(gold),
-            "ranked": ranked,
-            "first_hit_rank": first_hit,
-            "recall@5": recalls[5],
-            "recall@10": recalls[10],
-            "rr": rr,
-            "ndcg": ndcg,
-        })
+    return {
+        "query": example["query"],
+        "gold": sorted(gold),
+        "ranked": ranked,
+        "first_hit_rank": first_hit,
+        "recall@5": recalls[5],
+        "recall@10": recalls[10],
+        "rr": rr,
+        "ndcg": ndcg,
+    }
 
+
+def aggregate(per_query: list[dict]) -> dict:
     n = len(per_query) or 1
     return {
         "recall@5": sum(q["recall@5"] for q in per_query) / n,
@@ -137,6 +153,67 @@ def evaluate_mode(examples: list[dict], mode: str) -> dict:
         "ndcg@10": sum(q["ndcg"] for q in per_query) / n,
         "per_query": per_query,
     }
+
+
+def evaluate_mode(examples: list[dict], mode: str) -> dict:
+    return aggregate([score_query(ex, mode) for ex in examples])
+
+
+def evaluate_sequential(examples: list[dict], mode: str, thresholds: dict[str, float],
+                        alpha: float, seed: int) -> tuple[dict, dict]:
+    """Retrieve query by query and stop as soon as the gate's verdict is settled.
+
+    This is where the saving is actually taken: the loop exits before the remaining
+    queries are ever sent, so the unspent budget is unspent HTTP requests, LLM-judge
+    calls and wall-clock — not a smaller number in a report.
+
+    Two exits. All metrics decided is the normal one. *Any* metric deciding `fail` is the
+    other, and it short-circuits: the build is already red, and confirming the other two
+    metrics costs queries to learn nothing that changes the outcome.
+
+    The query order is a seeded shuffle. A gold set arrives grouped by topic, and a
+    sequential procedure reading it in file order would be deciding about whatever the
+    first section happens to contain.
+    """
+    ordered = sequential.shuffled(examples, seed)
+    gates = {metric: sequential.SequentialGate(threshold, metric, alpha)
+             for metric, threshold in thresholds.items()}
+    per_query: list[dict] = []
+    stop_reason = "budget exhausted"
+
+    for example in ordered:
+        scored = score_query(example, mode)
+        per_query.append(scored)
+        for metric, gate in gates.items():
+            gate.update(scored[METRIC_TO_QUERY_KEY[metric]])
+        failed = [m for m, g in gates.items() if g.decision == "fail"]
+        if failed:
+            stop_reason = f"{failed[0]} failed"
+            break
+        if all(g.decided for g in gates.values()):
+            stop_reason = "all metrics decided"
+            break
+
+    verdicts = {
+        metric: {
+            "metric": metric,
+            "threshold": gate.threshold,
+            "decision": gate.decision,
+            "measured": stats.mean(values_of({"per_query": per_query}, metric)),
+            "pass": gate.decision == "pass",
+        } for metric, gate in gates.items()
+    }
+    summary = {
+        "queries_used": len(per_query),
+        "queries_available": len(ordered),
+        "saved": len(ordered) - len(per_query),
+        "saved_fraction": (len(ordered) - len(per_query)) / len(ordered) if ordered else 0.0,
+        "stopped_early": stop_reason != "budget exhausted",
+        "stop_reason": stop_reason,
+        "alpha": alpha,
+        "seed": seed,
+    }
+    return aggregate(per_query), {"verdicts": verdicts, "summary": summary}
 
 
 # --------------------------------------------------------------------------------------
@@ -238,6 +315,33 @@ def gate_ci_lower(result: dict, thresholds: dict[str, float]) -> list[dict]:
     return checks
 
 
+def gate_sequential(run: dict) -> list[dict]:
+    """Turn the sequential verdicts into gate rows.
+
+    `undecided` fails. The budget ran out before the evidence arrived, which is a fact
+    about the gold set rather than a clean bill of health — and a gate that treats "we
+    could not tell" as a pass has quietly stopped gating.
+    """
+    summary = run["summary"]
+    used, available = summary["queries_used"], summary["queries_available"]
+
+    def detail(verdict: dict) -> str:
+        if verdict["decision"] != "undecided":
+            return f"{verdict['decision']} after {used}/{available} queries"
+        if summary["stop_reason"] == "budget exhausted":
+            return f"undecided after all {available} queries — gold set too small to tell"
+        # Short-circuited: the build was already red, so this metric was never settled.
+        return f"not settled — stopped at {used}/{available} once {summary['stop_reason']}"
+
+    return [{
+        "metric": v["metric"],
+        "measured": round(v["measured"], 4),
+        "threshold": v["threshold"],
+        "pass": v["pass"],
+        "detail": detail(v),
+    } for v in run["verdicts"].values()]
+
+
 def gate_regression(result: dict, baseline_result: dict, thresholds: dict[str, float],
                     iters: int) -> list[dict]:
     """Fail only on a statistically significant paired drop against a recorded run.
@@ -313,13 +417,17 @@ def print_report(results: dict[str, dict], queries: int, comparison: dict | None
         print()
 
     for mode, r in results.items():
-        for q in (q for q in r["per_query"] if q["first_hit_rank"] != 1):
+        misses = [q for q in r["per_query"] if q["first_hit_rank"] != 1]
+        for q in misses[:MAX_LISTED_MISSES]:
             print(f"  [{mode}] first hit @{q['first_hit_rank'] or 'miss'}: {q['query']}")
+        if len(misses) > MAX_LISTED_MISSES:
+            print(f"  [{mode}] ... and {len(misses) - MAX_LISTED_MISSES} more "
+                  f"(full list in --json)")
 
 
 def render_markdown(results: dict[str, dict], queries: int, gate: list[dict] | None,
                     gate_mode: str, gate_policy: str, comparison: dict | None,
-                    design: dict | None) -> str:
+                    design: dict | None, sequential_run: dict | None = None) -> str:
     modes = list(results)
     lines = ["## Retrieval eval — " + " vs ".join(modes), "",
              f"{queries} queries · doc-level ranking depth {RETRIEVE_K} · `{API}`", "",
@@ -367,6 +475,16 @@ def render_markdown(results: dict[str, dict], queries: int, gate: list[dict] | N
             lines.append(f"- Queries needed to resolve a {design['target_effect']:+.3f} "
                          f"change: **{design['queries_for_target']:,}**")
         lines.append("")
+
+    if sequential_run:
+        s = sequential_run["summary"]
+        lines += ["### Stopped early", "",
+                  f"Scored **{s['queries_used']} of {s['queries_available']}** queries and "
+                  f"stopped once the verdict was settled — **{s['saved_fraction']:.0%}** of "
+                  f"the query budget left unspent. The interval this stopped on is valid at "
+                  f"every sample size ([ADR 0012](docs/adr/0012-anytime-valid-evaluation.md)), "
+                  f"which is what makes stopping early a decision rather than a peek.", "",
+                  f"α = {s['alpha']}, shuffle seed = {s['seed']}.", ""]
 
     if gate is not None:
         verdict = "✅ **PASS**" if all(c["pass"] for c in gate) else "❌ **FAIL**"
@@ -416,12 +534,15 @@ def main() -> int:
                         help="enforce the gate policy on --gate-mode; exit 1 on regression")
     parser.add_argument("--gate-mode", default="hybrid", choices=list(MODE_PARAMS))
     parser.add_argument("--gate-policy", default="point",
-                        choices=["point", "ci-lower", "regression"],
+                        choices=["point", "ci-lower", "regression", "sequential"],
                         help="point: measured >= threshold. ci-lower: 95%% lower bound >= "
                              "threshold. regression: also fail on a significant paired drop "
-                             "against --baseline-json")
+                             "against --baseline-json. sequential: stop as soon as the "
+                             "verdict is settled (anytime-valid)")
     parser.add_argument("--baseline-json", metavar="PATH",
                         help="a previous --json result; required by --gate-policy regression")
+    parser.add_argument("--sequential-seed", type=int, default=SEQUENTIAL_SEED,
+                        help="seed for the query shuffle a sequential gate reads in")
     parser.add_argument("--min-recall5", type=float, default=0.90)
     parser.add_argument("--min-mrr10", type=float, default=0.85)
     parser.add_argument("--min-ndcg10", type=float, default=0.85)
@@ -442,7 +563,23 @@ def main() -> int:
     if args.gate_policy == "regression" and not args.baseline_json:
         parser.error("--gate-policy regression requires --baseline-json")
 
-    results = {mode: evaluate_mode(examples, mode) for mode in modes}
+    thresholds = {"recall@5": args.min_recall5, "mrr@10": args.min_mrr10,
+                  "ndcg@10": args.min_ndcg10}
+
+    # A sequential gate answers one question as cheaply as possible; sweeping other modes
+    # to fill a comparison table would spend exactly the queries it exists to save.
+    sequential_run = None
+    if args.gate and args.gate_policy == "sequential":
+        if modes != [args.gate_mode]:
+            print(f"note: sequential gating evaluates only '{args.gate_mode}' — "
+                  f"skipping {[m for m in modes if m != args.gate_mode]}\n")
+        modes = [args.gate_mode]
+        gate_result, sequential_run = evaluate_sequential(
+            examples, args.gate_mode, thresholds, ALPHA, args.sequential_seed)
+        results = {args.gate_mode: gate_result}
+        baseline_mode = args.gate_mode
+    else:
+        results = {mode: evaluate_mode(examples, mode) for mode in modes}
 
     comparison = design = None
     if not args.no_stats:
@@ -458,11 +595,21 @@ def main() -> int:
             r["ci"] = {m: {"lo": r[m], "hi": r[m], "method": "none"} for m in METRIC_COLUMNS}
     print_report(results, len(examples), comparison, design)
 
+    if sequential_run:
+        s = sequential_run["summary"]
+        print(f"sequential gate: scored {s['queries_used']}/{s['queries_available']} "
+              f"queries, {s['saved_fraction']:.0%} of the budget unspent "
+              f"({s['stop_reason']}; alpha={s['alpha']}, seed={s['seed']})")
+        for v in sequential_run["verdicts"].values():
+            print(f"  {v['metric']:<10} {v['decision']:<10} "
+                  f"measured={v['measured']:.3f} threshold={v['threshold']:.2f}")
+        print()
+
     gate = None
     if args.gate:
-        thresholds = {"recall@5": args.min_recall5, "mrr@10": args.min_mrr10,
-                      "ndcg@10": args.min_ndcg10}
-        if args.gate_policy == "point":
+        if args.gate_policy == "sequential":
+            gate = gate_sequential(sequential_run)
+        elif args.gate_policy == "point":
             gate = gate_point(results[args.gate_mode], thresholds)
         elif args.gate_policy == "ci-lower":
             gate = gate_ci_lower(results[args.gate_mode], thresholds)
@@ -488,6 +635,7 @@ def main() -> int:
             "modes": results,
             "comparison": comparison,
             "design": design,
+            "sequential": sequential_run,
             "gate": None if gate is None else {
                 "mode": args.gate_mode,
                 "policy": args.gate_policy,
@@ -501,7 +649,7 @@ def main() -> int:
     if args.markdown:
         with open(args.markdown, "w", encoding="utf-8") as f:
             f.write(render_markdown(results, len(examples), gate, args.gate_mode,
-                                    args.gate_policy, comparison, design))
+                                    args.gate_policy, comparison, design, sequential_run))
 
     if gate is not None and not all(c["pass"] for c in gate):
         print("\nregression gate FAILED", file=sys.stderr)

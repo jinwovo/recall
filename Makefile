@@ -1,4 +1,4 @@
-.PHONY: up down logs backend frontend seed seed-corpus ingest eval eval-gate eval-sweep eval-test eval-stats loadtest
+.PHONY: up down logs backend frontend seed seed-corpus ingest eval eval-gate eval-sweep eval-test eval-stats eval-anytime loadtest
 
 up:            ## start infra (ES, Redis, Postgres, Kafka, MinIO, sidecar, Prometheus, Grafana)
 	docker compose up -d
@@ -38,6 +38,9 @@ eval-test:     ## unit-test the eval harness itself — no stack needed (docs/ad
 
 eval-stats:    ## what the current gold set can and cannot resolve, before running anything
 	cd eval && python power_report.py gold.jsonl
+
+eval-anytime:  ## reproduce the anytime-evaluation experiment (docs/adr/0012) — no stack needed
+	cd eval && python anytime_experiment.py
 
 loadtest:      ## run the k6 search load test
 	k6 run load-test/search.js

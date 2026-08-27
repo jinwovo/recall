@@ -1,0 +1,260 @@
+{
+  "alpha": 0.05,
+  "streams": 800,
+  "peeking": [
+    {
+      "metric": "Recall@5 (0/1)",
+      "true_mean": 0.85,
+      "queries": 50,
+      "min_peek": 30,
+      "fixed_n_escape_rate": 0.1925,
+      "anytime_escape_rate": 0.00625,
+      "streams": 800
+    },
+    {
+      "metric": "Recall@5 (0/1)",
+      "true_mean": 0.85,
+      "queries": 150,
+      "min_peek": 30,
+      "fixed_n_escape_rate": 0.2925,
+      "anytime_escape_rate": 0.0225,
+      "streams": 800
+    },
+    {
+      "metric": "Recall@5 (0/1)",
+      "true_mean": 0.85,
+      "queries": 300,
+      "min_peek": 30,
+      "fixed_n_escape_rate": 0.34,
+      "anytime_escape_rate": 0.01875,
+      "streams": 800
+    },
+    {
+      "metric": "reciprocal rank (discrete, skewed)",
+      "true_mean": 0.7433333333333333,
+      "queries": 50,
+      "min_peek": 30,
+      "fixed_n_escape_rate": 0.15625,
+      "anytime_escape_rate": 0.00625,
+      "streams": 800
+    },
+    {
+      "metric": "reciprocal rank (discrete, skewed)",
+      "true_mean": 0.7433333333333333,
+      "queries": 150,
+      "min_peek": 30,
+      "fixed_n_escape_rate": 0.255,
+      "anytime_escape_rate": 0.0175,
+      "streams": 800
+    },
+    {
+      "metric": "reciprocal rank (discrete, skewed)",
+      "true_mean": 0.7433333333333333,
+      "queries": 300,
+      "min_peek": 30,
+      "fixed_n_escape_rate": 0.3275,
+      "anytime_escape_rate": 0.02625,
+      "streams": 800
+    },
+    {
+      "metric": "nDCG@10 (graded)",
+      "true_mean": 0.6666666666666666,
+      "queries": 50,
+      "min_peek": 30,
+      "fixed_n_escape_rate": 0.1875,
+      "anytime_escape_rate": 0.005,
+      "streams": 800
+    },
+    {
+      "metric": "nDCG@10 (graded)",
+      "true_mean": 0.6666666666666666,
+      "queries": 150,
+      "min_peek": 30,
+      "fixed_n_escape_rate": 0.2575,
+      "anytime_escape_rate": 0.00875,
+      "streams": 800
+    },
+    {
+      "metric": "nDCG@10 (graded)",
+      "true_mean": 0.6666666666666666,
+      "queries": 300,
+      "min_peek": 30,
+      "fixed_n_escape_rate": 0.35125,
+      "anytime_escape_rate": 0.01625,
+      "streams": 800
+    },
+    {
+      "metric": "groundedness judge (skewed high)",
+      "true_mean": 0.8,
+      "queries": 50,
+      "min_peek": 30,
+      "fixed_n_escape_rate": 0.14875,
+      "anytime_escape_rate": 0.0025,
+      "streams": 800
+    },
+    {
+      "metric": "groundedness judge (skewed high)",
+      "true_mean": 0.8,
+      "queries": 150,
+      "min_peek": 30,
+      "fixed_n_escape_rate": 0.245,
+      "anytime_escape_rate": 0.0025,
+      "streams": 800
+    },
+    {
+      "metric": "groundedness judge (skewed high)",
+      "true_mean": 0.8,
+      "queries": 300,
+      "min_peek": 30,
+      "fixed_n_escape_rate": 0.3,
+      "anytime_escape_rate": 0.005,
+      "streams": 800
+    }
+  ],
+  "gates": [
+    {
+      "true_mean": 0.98,
+      "threshold": 0.85,
+      "median_stop": 53,
+      "mean_stop": 54.1825,
+      "budget": 300,
+      "saved_fraction": 0.8193916666666667,
+      "decided_fraction": 1.0,
+      "wrong_fraction": 0.0,
+      "decisions": {
+        "pass": 800,
+        "fail": 0,
+        "undecided": 0
+      },
+      "streams": 800
+    },
+    {
+      "true_mean": 0.95,
+      "threshold": 0.85,
+      "median_stop": 72,
+      "mean_stop": 88.8625,
+      "budget": 300,
+      "saved_fraction": 0.7037916666666666,
+      "decided_fraction": 0.9975,
+      "wrong_fraction": 0.0,
+      "decisions": {
+        "pass": 798,
+        "fail": 0,
+        "undecided": 2
+      },
+      "streams": 800
+    },
+    {
+      "true_mean": 0.92,
+      "threshold": 0.85,
+      "median_stop": 150,
+      "mean_stop": 171.55125,
+      "budget": 300,
+      "saved_fraction": 0.4281625,
+      "decided_fraction": 0.7925,
+      "wrong_fraction": 0.0,
+      "decisions": {
+        "pass": 634,
+        "fail": 0,
+        "undecided": 166
+      },
+      "streams": 800
+    },
+    {
+      "true_mean": 0.9,
+      "threshold": 0.85,
+      "median_stop": 300,
+      "mean_stop": 235.99875,
+      "budget": 300,
+      "saved_fraction": 0.21333749999999996,
+      "decided_fraction": 0.435,
+      "wrong_fraction": 0.00125,
+      "decisions": {
+        "pass": 347,
+        "fail": 1,
+        "undecided": 452
+      },
+      "streams": 800
+    },
+    {
+      "true_mean": 0.88,
+      "threshold": 0.85,
+      "median_stop": 300,
+      "mean_stop": 282.46375,
+      "budget": 300,
+      "saved_fraction": 0.058454166666666696,
+      "decided_fraction": 0.1175,
+      "wrong_fraction": 0.0025,
+      "decisions": {
+        "pass": 92,
+        "fail": 2,
+        "undecided": 706
+      },
+      "streams": 800
+    },
+    {
+      "true_mean": 0.85,
+      "threshold": 0.85,
+      "median_stop": 300,
+      "mean_stop": 293.44375,
+      "budget": 300,
+      "saved_fraction": 0.02185416666666662,
+      "decided_fraction": 0.03125,
+      "wrong_fraction": 0.0175,
+      "decisions": {
+        "pass": 14,
+        "fail": 11,
+        "undecided": 775
+      },
+      "streams": 800
+    },
+    {
+      "true_mean": 0.82,
+      "threshold": 0.85,
+      "median_stop": 300,
+      "mean_stop": 286.305,
+      "budget": 300,
+      "saved_fraction": 0.04564999999999997,
+      "decided_fraction": 0.0725,
+      "wrong_fraction": 0.00125,
+      "decisions": {
+        "pass": 1,
+        "fail": 57,
+        "undecided": 742
+      },
+      "streams": 800
+    },
+    {
+      "true_mean": 0.75,
+      "threshold": 0.85,
+      "median_stop": 177,
+      "mean_stop": 178.5825,
+      "budget": 300,
+      "saved_fraction": 0.404725,
+      "decided_fraction": 0.7125,
+      "wrong_fraction": 0.0,
+      "decisions": {
+        "pass": 0,
+        "fail": 570,
+        "undecided": 230
+      },
+      "streams": 800
+    },
+    {
+      "true_mean": 0.6,
+      "threshold": 0.85,
+      "median_stop": 25,
+      "mean_stop": 31.0025,
+      "budget": 300,
+      "saved_fraction": 0.8966583333333333,
+      "decided_fraction": 1.0,
+      "wrong_fraction": 0.0,
+      "decisions": {
+        "pass": 0,
+        "fail": 800,
+        "undecided": 0
+      },
+      "streams": 800
+    }
+  ]
+}

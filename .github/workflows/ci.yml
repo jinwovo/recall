@@ -70,12 +70,13 @@ jobs:
           python-version: "3.11"
       - run: python -m unittest discover -s eval -p "test_*.py" -v
 
-  # The rag-eval-gate action vendors run_eval.py / stats.py / seed_corpus.py so external
-  # repos get a self-contained action — this guard fails the build if a copy drifts.
+  # The rag-eval-gate action vendors the harness so external repos get a self-contained
+  # action — this guard fails the build if a copy drifts from canonical.
   action-sync:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: diff eval/run_eval.py .github/actions/rag-eval-gate/run_eval.py
       - run: diff eval/stats.py .github/actions/rag-eval-gate/stats.py
+      - run: diff eval/sequential.py .github/actions/rag-eval-gate/sequential.py
       - run: diff scripts/seed_corpus.py .github/actions/rag-eval-gate/seed_corpus.py

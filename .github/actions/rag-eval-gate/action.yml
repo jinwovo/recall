@@ -2,9 +2,10 @@ name: "RAG eval gate"
 description: >-
   Gate pull requests on retrieval quality: doc-level Recall@5/@10, MRR@10 and nDCG@10
   against your gold set — each with a 95% interval, each mode significance-tested against
-  the baseline, and a statement of what your gold set can resolve at all. Three gate
-  policies including a paired regression test against a recorded run. Optionally seeds a
-  corpus first and waits for async indexing to converge.
+  the baseline, and a statement of what your gold set can resolve at all. Four gate
+  policies, including a paired regression test against a recorded run and an anytime-valid
+  sequential gate that stops as soon as the verdict is settled. Optionally seeds a corpus
+  first and waits for async indexing to converge.
 author: jinwovo
 branding:
   icon: check-circle
@@ -37,8 +38,11 @@ inputs:
     default: "hybrid"
   gate-policy:
     description: >-
-      point (measured >= threshold), ci-lower (95% lower bound >= threshold), or
-      regression (also fail on a statistically significant paired drop vs baseline-json)
+      point (measured >= threshold), ci-lower (95% lower bound >= threshold),
+      regression (also fail on a statistically significant paired drop vs baseline-json),
+      or sequential (score queries one at a time and stop the moment the verdict is
+      settled — an anytime-valid confidence sequence, so a clearly-good system is cleared
+      on a fraction of the gold set and a broken one fails in fewer queries still)
     default: "point"
   baseline-json:
     description: >-
@@ -52,6 +56,9 @@ inputs:
   bootstrap-iters:
     description: Resampling draws for intervals and Monte Carlo p-values
     default: "10000"
+  sequential-seed:
+    description: Seed for the query shuffle a sequential gate reads in
+    default: "1337"
   min-recall5:
     default: "0.90"
   min-mrr10:
@@ -83,6 +90,7 @@ runs:
           --gate-policy "${{ inputs.gate-policy }}"
           --modes "${{ inputs.modes }}"
           --bootstrap-iters "${{ inputs.bootstrap-iters }}"
+          --sequential-seed "${{ inputs.sequential-seed }}"
           --min-recall5 "${{ inputs.min-recall5 }}"
           --min-mrr10 "${{ inputs.min-mrr10 }}"
           --min-ndcg10 "${{ inputs.min-ndcg10 }}"

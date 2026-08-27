@@ -4,7 +4,8 @@ An eval harness that gates CI is production code: if it computes nDCG wrong, or 
 wrong interval, or lets a regression through, every number downstream of it is wrong and
 nothing else in the build will say so. These tests run the whole harness offline against a
 stubbed search backend whose rankings are fixed, so every metric has a value derivable by
-hand and the three gate policies can be driven into both outcomes.
+hand and all four gate policies — including the sequential one, whose saving has to be
+real API calls not made — can be driven into both outcomes.
 
 Run: `python -m unittest discover -s eval -p "test_*.py"` (standard library only).
 """
@@ -255,3 +256,137 @@ class ReportRenderingTest(HarnessTestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+# --------------------------------------------------------------------------------------
+# sequential gating (docs/adr/0012)
+# --------------------------------------------------------------------------------------
+
+BIG_GOLD = [{"query": f"s{i}", "relevant_doc_ids": [f"d{i}"]} for i in range(200)]
+
+
+class SequentialGateTest(unittest.TestCase):
+    """Drives the early-stopping path against a backend whose quality is dialled by hand."""
+
+    THRESHOLDS = {"recall@5": 0.90, "mrr@10": 0.85, "ndcg@10": 0.85}
+
+    def install(self, rank_for):
+        calls = []
+
+        def stub(query, mode, attempts=3):
+            index = int(query[1:])
+            calls.append(index)
+            rank = rank_for(index)
+            ranked = [f"filler-{index}-{j}" for j in range(run_eval.RETRIEVE_K)]
+            if rank is not None:
+                ranked[rank - 1] = f"d{index}"
+            return ranked
+
+        real = run_eval.search
+        run_eval.search = stub
+        self.addCleanup(lambda: setattr(run_eval, "search", real))
+        return calls
+
+    def run_gate(self, rank_for, gold=None):
+        calls = self.install(rank_for)
+        result, run = run_eval.evaluate_sequential(
+            gold or BIG_GOLD, "hybrid", self.THRESHOLDS, run_eval.ALPHA,
+            run_eval.SEQUENTIAL_SEED)
+        return result, run, calls
+
+    def test_a_strong_system_is_cleared_without_spending_the_whole_gold_set(self):
+        _, run, calls = self.run_gate(lambda i: 1)
+        summary = run["summary"]
+        self.assertEqual(summary["stop_reason"], "all metrics decided")
+        self.assertTrue(summary["stopped_early"])
+        self.assertLess(summary["queries_used"], len(BIG_GOLD))
+        self.assertGreater(summary["saved_fraction"], 0.5)
+        self.assertTrue(all(v["pass"] for v in run["verdicts"].values()))
+        # The saving is real work not done, not a smaller number in a report.
+        self.assertEqual(len(calls), summary["queries_used"])
+
+    def test_a_broken_system_fails_faster_than_a_good_one_passes(self):
+        _, good, _ = self.run_gate(lambda i: 1)
+        _, bad, bad_calls = self.run_gate(lambda i: None)
+        self.assertIn("failed", bad["summary"]["stop_reason"])
+        self.assertLess(bad["summary"]["queries_used"], good["summary"]["queries_used"])
+        self.assertEqual(len(bad_calls), bad["summary"]["queries_used"])
+
+    def test_short_circuiting_leaves_the_other_metrics_unsettled_not_passed(self):
+        _, run, _ = self.run_gate(lambda i: None)
+        decisions = {m: v["decision"] for m, v in run["verdicts"].items()}
+        self.assertIn("fail", decisions.values())
+        for verdict in run["verdicts"].values():
+            self.assertFalse(verdict["pass"])
+
+    def test_a_system_on_the_line_exhausts_the_budget_and_does_not_pass(self):
+        # Recall@5 lands at exactly the 0.90 threshold, so no evidence ever accumulates.
+        _, run, _ = self.run_gate(lambda i: 1 if i % 10 else None)
+        self.assertEqual(run["summary"]["stop_reason"], "budget exhausted")
+        self.assertFalse(run["summary"]["stopped_early"])
+        self.assertEqual(run["summary"]["saved"], 0)
+        recall = run["verdicts"]["recall@5"]
+        self.assertEqual(recall["decision"], "undecided")
+        self.assertFalse(recall["pass"])
+
+    def test_the_shuffle_is_seeded_so_two_runs_agree(self):
+        first = self.run_gate(lambda i: 1)[1]["summary"]
+        second = self.run_gate(lambda i: 1)[1]["summary"]
+        self.assertEqual(first, second)
+
+    def test_markdown_reports_what_was_saved(self):
+        result, run, _ = self.run_gate(lambda i: 1)
+        run_eval.add_intervals({"hybrid": result}, 500)
+        md = run_eval.render_markdown({"hybrid": result}, run["summary"]["queries_used"],
+                                      run_eval.gate_sequential(run), "hybrid", "sequential",
+                                      None, None, run)
+        self.assertIn("Stopped early", md)
+        self.assertIn("query budget left unspent", md)
+        self.assertIn("valid at every sample size", md)
+
+    def test_exhausting_the_budget_is_reported_as_a_gold_set_problem(self):
+        _, exhausted, _ = self.run_gate(lambda i: 1 if i % 10 else None)
+        rows = run_eval.gate_sequential(exhausted)
+        self.assertTrue(any("gold set too small" in r["detail"] for r in rows))
+        self.assertFalse(all(r["pass"] for r in rows))
+
+
+class SequentialGateWordingTest(unittest.TestCase):
+    """`gate_sequential` is pure, so its three phrasings are pinned directly.
+
+    Reaching each one through the gate itself would mean engineering a run where one
+    metric fails while another is genuinely still open — possible, but it would make the
+    assertion depend on where the stopping times happen to land.
+    """
+
+    def rows(self, stop_reason: str, decisions: dict[str, str], used: int = 40):
+        run = {
+            "summary": {"queries_used": used, "queries_available": 200,
+                        "saved": 200 - used, "saved_fraction": (200 - used) / 200,
+                        "stopped_early": stop_reason != "budget exhausted",
+                        "stop_reason": stop_reason, "alpha": 0.05, "seed": 1},
+            "verdicts": {m: {"metric": m, "threshold": 0.85, "decision": d,
+                             "measured": 0.5, "pass": d == "pass"}
+                         for m, d in decisions.items()},
+        }
+        return {r["metric"]: r for r in run_eval.gate_sequential(run)}
+
+    def test_a_settled_metric_names_its_decision_and_cost(self):
+        rows = self.rows("all metrics decided", {"mrr@10": "pass"})
+        self.assertEqual(rows["mrr@10"]["detail"], "pass after 40/200 queries")
+        self.assertTrue(rows["mrr@10"]["pass"])
+
+    def test_a_short_circuited_metric_is_not_settled_rather_than_exhausted(self):
+        # The build went red on another metric, so this one was never given the chance —
+        # calling that "budget exhausted" would misdescribe why no answer exists.
+        rows = self.rows("recall@5 failed",
+                         {"recall@5": "fail", "ndcg@10": "undecided"})
+        self.assertEqual(rows["recall@5"]["detail"], "fail after 40/200 queries")
+        self.assertIn("not settled", rows["ndcg@10"]["detail"])
+        self.assertIn("recall@5 failed", rows["ndcg@10"]["detail"])
+        self.assertNotIn("gold set too small", rows["ndcg@10"]["detail"])
+
+    def test_running_out_of_queries_blames_the_gold_set(self):
+        rows = self.rows("budget exhausted", {"mrr@10": "undecided"}, used=200)
+        self.assertIn("gold set too small", rows["mrr@10"]["detail"])
+        self.assertFalse(rows["mrr@10"]["pass"])
