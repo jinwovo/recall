@@ -341,7 +341,7 @@ a TREC run file (so a corpus can be ranked once, offline, and evaluated with not
 running). Gold sets are JSONL or TREC qrels.
 
 ```yaml
-- uses: jinwovo/rag-eval-gate@v1
+- uses: jinwovo/rag-eval-gate@v0
   with:
     gold-file: eval/gold.jsonl
     url-template: 'http://localhost:8080/api/search?q={query}&mode={mode}'
