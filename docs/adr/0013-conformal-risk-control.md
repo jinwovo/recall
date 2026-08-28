@@ -1,6 +1,8 @@
 # ADR 0013 — The constants that decide cost and hallucination become certificates
 
-Status: accepted · Supersedes the threshold in [ADR 0009](0009-sufficient-context-bbq.md)
+Status: accepted · Supersedes the threshold in [ADR 0009](0009-sufficient-context-bbq.md) ·
+Amended by [ADR 0016](0016-adaptive-conformal-drift.md), which measures what happens to
+this certificate once the corpus stops standing still
 
 ## Context
 
@@ -33,7 +35,10 @@ often the system answers when it should not, and no such claim was ever made or 
 Both become thresholds calibrated on held-out queries, carrying **finite-sample,
 distribution-free guarantees**. No assumption about the score distribution, no asymptotics,
 no requirement that the reranker be well calibrated — only that calibration and deployment
-queries are exchangeable.
+queries are exchangeable. That assumption is load-bearing and has a shelf life —
+[ADR 0016](0016-adaptive-conformal-drift.md) measures the frozen threshold below
+delivering 45.9% coverage against the 90% it promises, once the score distribution
+moves — so it is stated here rather than left implicit.
 
 ### Coverage: adaptive context sizing
 

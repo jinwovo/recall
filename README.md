@@ -48,7 +48,7 @@ The system was engineered. The measurement was not. What follows is the second v
 
 ---
 
-## Four things that are now guarantees
+## Five things that are now guarantees
 
 ### 1. Evaluation that stays valid while you watch it
 
@@ -250,6 +250,46 @@ is that the log printing `indexed N chunks` proves nothing and the committed off
 only real progress signal.
 
 → [ADR 0014](docs/adr/0014-beir-benchmark-scale.md)
+
+### 5. The certificate from #2 expires, and the system now says so
+
+That threshold two sections up is eighteen significant figures resting on an assumption
+printed nowhere near it: the queries it was calibrated on and the queries it serves must come
+from the same distribution. A live corpus breaks that in a week — documents get ingested,
+query mix moves, someone swaps the embedding model — and the failure is silent. Config
+unchanged, dashboards green, promise no longer true.
+
+The level becomes a control variable driven by realised miscoverage (Gibbs & Candès, NeurIPS
+2021). Summing the update telescopes to an exact identity, and `alpha_t` cannot escape
+`[-gamma, 1+gamma]`, so long-run coverage converges to target **under no distributional
+assumption at all** — not exchangeability, not stationarity, not even that the shift is
+random rather than adversarial.
+
+200 streams, 3,000 queries each, promise 90%:
+
+| scenario | frozen threshold | rolling window | adaptive |
+|---|---|---|---|
+| location shift (+0.30) | 0.459 | 0.876 | **0.900** |
+| score saturation | 0.306 | 0.939 | **0.903** |
+
+**The middle column is the interesting one, and it is not the result I went looking for.**
+Against a plain location shift a rolling window does essentially all the work by itself — the
+quantile moves with the data and the controller never sees the shift. The tests pin that as
+an identity: across shifts of 0.00, 0.20 and 0.30, the widest excursion of the level from
+target is the *same* 0.100. An earlier draft of this section claimed the controller was
+catching drift there. It was not, and the number that looked like proof was an artefact of
+the test generator clamping scores at 1.0.
+
+What the controller is actually for is the residual and the case the window cannot track. The
+window is systematically off even when it works — undercovering at 87.6%, and *over*covering
+at 93.9% under saturation, which is not safety but prompt tokens spent on sets larger than
+the guarantee needs. And when most candidates pile onto one tied top score, no rolling
+quantile separates them; only a displaced level holds coverage together, which is why the
+signal is called `compensating` and not `drifting`. It stays False through a shift the window
+absorbs (0/60) and fires on every saturating stream (60/60).
+
+→ [ADR 0016](docs/adr/0016-adaptive-conformal-drift.md) · `python eval/adaptive_experiment.py`
+reproduces the table
 
 ### And the tuner has to prove itself now
 
@@ -581,6 +621,7 @@ docs/adr/           every decision, including the ones that overturned earlier o
 - **[ADR 0013 — The constants that decide cost and hallucination become certificates](docs/adr/0013-conformal-risk-control.md)**
 - **[ADR 0014 — A benchmark the harness can actually resolve](docs/adr/0014-beir-benchmark-scale.md)**
 - **[ADR 0015 — The LLM judge is a measuring instrument, and it was never calibrated](docs/adr/0015-prediction-powered-inference.md)**
+- **[ADR 0016 — The certificate expires, and nothing tells you](docs/adr/0016-adaptive-conformal-drift.md)**
 
 ## Roadmap
 

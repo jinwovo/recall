@@ -1,0 +1,39 @@
+{
+  "settings": {
+    "trials": 200,
+    "alpha": 0.1,
+    "gamma": 0.05,
+    "window": 600,
+    "live": 3000,
+    "shift_at": 1000,
+    "seed": 54321
+  },
+  "rows": [
+    {
+      "scenario": "location shift (+0.30)",
+      "trials": 200,
+      "fixed": 0.45932833333333334,
+      "fixed_worst": 0.39566666666666667,
+      "window": 0.8761383333333334,
+      "adaptive": 0.9001250000000001,
+      "offset": 0.0272500000000064,
+      "compensating": 0.0,
+      "within_bound": 1.0,
+      "recovery_median": 0.0,
+      "recovered": 1.0
+    },
+    {
+      "scenario": "score saturation",
+      "trials": 200,
+      "fixed": 0.30588333333333334,
+      "fixed_worst": 0.2836666666666667,
+      "window": 0.9386966666666666,
+      "adaptive": 0.9034283333333333,
+      "offset": 0.5142500000000044,
+      "compensating": 1.0,
+      "within_bound": 1.0,
+      "recovery_median": 0.0,
+      "recovered": 1.0
+    }
+  ]
+}
