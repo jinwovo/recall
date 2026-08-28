@@ -95,6 +95,14 @@ recall:
       threshold: ${RAG_CONFORMAL_THRESHOLD:-1}    # -1 = uncalibrated; sizing stays off
       temperature: ${RAG_CONFORMAL_TEMPERATURE:1.0}
       max-k: ${RAG_CONFORMAL_MAX_K:12}            # hard context cap; overrides the certificate when it binds
+      # Is the certificate above still true? (docs/adr/0016) A threshold calibrated once is
+      # valid only while traffic matches the distribution it was fitted on, and that failure
+      # is silent. The monitor tracks the judge's miscoverage rate with an anytime-valid
+      # confidence sequence — inspected after every query, which a fixed-N binomial test
+      # cannot survive (docs/adr/0012) — and warns once the promised rate is ruled out.
+      monitor-enabled: ${RAG_CONFORMAL_MONITOR_ENABLED:true}
+      monitor-alpha: ${RAG_CONFORMAL_MONITOR_ALPHA:0.05}   # false alarms over the whole stream, not per check
+      monitor-warmup: ${RAG_CONFORMAL_MONITOR_WARMUP:50}   # judged answers before the alarm can fire
   llm:                         # provider toggle: claude (default) | groq (free)
     provider: ${LLM_PROVIDER:claude}
     groq:

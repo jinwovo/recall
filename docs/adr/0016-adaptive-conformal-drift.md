@@ -109,11 +109,60 @@ produce. Under exchangeability the widest stationary excursion measured over 2,0
 spare: 0/60 false positives on stationary data, 0/60 on an absorbed location shift, 60/60 on
 saturation.
 
+## The serving side monitors; it does not correct
+
+`eval/adaptive.py` closes the loop offline. `CoverageMonitor` (Java) is what ships in the
+request path, and the difference is deliberate rather than a staged rollout.
+
+**The controller cannot run in serving, and saying why is the point.** It needs a
+nonconformity score at every step to recompute its quantile. That score requires knowing
+which passage was relevant — which the gold set supplies offline and nothing supplies
+online. Driving the threshold directly off a binary verdict would look like the same
+algorithm while dropping the property that makes it work: the containment argument needs an
+empty set that always misses, and the shortest set this pipeline can return is one passage.
+That would be a guarantee-shaped object with no guarantee inside it.
+
+**So serving gets the alarm instead.** The coverage signal is the post-hoc groundedness
+judge — an `UNSUPPORTED` verdict counts as a miss, since an answer that cannot be tied back
+to the retrieved passages is the failure the conformal set exists to prevent.
+
+**The test has to be anytime-valid, and this is where ADR 0012 earns its keep.** The obvious
+implementation is a binomial test on the miscoverage rate. It is invalid here for exactly the
+reason [ADR 0012](0012-anytime-valid-evaluation.md) documents: the stream is inspected after
+every query and alarms on the first excursion, which is continuous inspection with optional
+stopping — the arrangement under which a 95% interval was measured to miss 30–35% of the
+time. Built that way, the alarm would cry wolf several times a week. So the rate is tracked
+with a betting confidence sequence, valid at every sample size simultaneously, and checking
+it after every query costs nothing in validity.
+
+**The alarm is one-sided.** The certificate promises `miscoverage <= alpha`; only one
+direction breaks it. Firing whenever alpha merely leaves the interval would alarm on a system
+covering *better* than promised — and conformal prediction is conservative by construction,
+so that is the ordinary state of a healthy deployment, not an incident. Over-coverage is
+reported separately as a gauge, because it costs prompt tokens rather than correctness and
+nobody should be paged for it.
+
+**Two caveats that are not repaired anywhere.** The judge is a biased instrument — ADR 0015
+measured a judge's own score covering the truth 0% of the time — so this tracks the *judge's*
+miscoverage, not the true one, and judge drift is indistinguishable from retrieval drift. And
+judging is fail-open, skipped on abstentions and on cache hits, so the monitored stream is a
+subpopulation of traffic. It is a smoke detector, not a thermometer.
+
+Agreement with `eval/sequential.py` is pinned the same way `ConformalSetSizer`'s is: golden
+streams generated in Python and embedded verbatim, because Java's RNG cannot reproduce
+Python's Mersenne Twister and a test generating its own data would pin the port against
+itself. The assertions cover the interval bounds *and the exact query at which the alarm
+fires* (43 for a 35% stream, 3 for an always-missing one) — a statement about every prefix,
+not just the endpoint.
+
+Off by default: with sizing disabled or alpha unconfigured it observes nothing.
+
 ## Consequences
 
-**A serving threshold can now be wrong out loud.** `report()` carries the standing offset,
-whether the bound held, and `compensating`. A threshold that has stopped meaning what it
-says becomes a signal instead of a silence.
+**A serving threshold can now be wrong out loud.** Offline, `report()` carries the standing
+offset, whether the bound held, and `compensating`. In production, `CoverageMonitor` raises
+`recall.rag.coverage.alarm` and a log line naming the recalibration. A threshold that has
+stopped meaning what it says becomes a signal instead of a silence.
 
 **The saturating reranker is now detectable.** Once most candidates share the top score, no
 threshold separates them and every downstream guarantee degrades quietly. This is a real

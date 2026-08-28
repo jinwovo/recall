@@ -288,6 +288,22 @@ quantile separates them; only a displaced level holds coverage together, which i
 signal is called `compensating` and not `drifting`. It stays False through a shift the window
 absorbs (0/60) and fires on every saturating stream (60/60).
 
+**And the serving path says it out loud.** `CoverageMonitor` (Java) watches the deployed
+certificate using the groundedness judge as its coverage signal, and warns once the promised
+rate has been *ruled out* — 43 queries into a stream missing 35% of the time. It has to be
+anytime-valid, and that is where #1 pays for itself: this stream is inspected after every
+query, which is exactly the arrangement where a fixed-N interval was measured missing 30-35%
+of the time. A binomial test here would cry wolf weekly.
+
+The alarm is one-sided, because a system covering *better* than promised is the ordinary
+state of a conservative method, not an incident — over-coverage is a token-cost gauge, not a
+page. Two caveats the code states rather than hides: the judge is a biased instrument (#3),
+so this is the judge's miscoverage and not the truth, and judging skips abstentions and cache
+hits, so it watches a subpopulation of traffic. A smoke detector, not a thermometer. The
+controller itself stays offline — it needs a nonconformity score per query, and serving has
+no gold label to compute one from; shipping it anyway would be a guarantee-shaped object with
+no guarantee in it.
+
 → [ADR 0016](docs/adr/0016-adaptive-conformal-drift.md) · `python eval/adaptive_experiment.py`
 reproduces the table
 

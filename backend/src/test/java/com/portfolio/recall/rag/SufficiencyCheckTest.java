@@ -32,7 +32,7 @@ class SufficiencyCheckTest {
                 null, null, null, null, null, null, null,
                 new RecallProperties.Rag(new RecallProperties.Rag.Judge(false, 5),
                         new RecallProperties.Rag.Sufficiency(enabled, threshold, 5),
-                        new RecallProperties.Rag.Conformal(false, 0.10, -1.0, 1.0, 12)),
+                        new RecallProperties.Rag.Conformal(false, 0.10, -1.0, 1.0, 12, false, 0.05, 0)),
                 null);
         return new SufficiencyCheck(llm, meters, props);
     }

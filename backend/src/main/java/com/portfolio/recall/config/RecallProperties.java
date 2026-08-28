@@ -64,8 +64,23 @@ public record RecallProperties(
          * calibrated at. {@code maxK} is a hard context cap that overrides the certificate
          * when it binds. Disabled → retrieval.topK, unchanged.
          */
+        /**
+         * @param monitorEnabled  watch whether the deployed certificate still holds
+         *                        (docs/adr/0016). Needs {@code enabled} too — monitoring a
+         *                        certificate that was never issued is noise.
+         * @param monitorAlpha    the monitor's own error budget, not the coverage level.
+         *                        This is the chance the anytime-valid sequence ever excludes
+         *                        the true miscoverage rate across the whole stream, so it
+         *                        buys a false-alarm rate over the lifetime of the process
+         *                        rather than per check.
+         * @param monitorWarmup   judged answers to collect before the alarm can fire. The
+         *                        sequence is valid from the first observation; this only
+         *                        keeps a deploy from alarming off a handful of queries.
+         */
         public record Conformal(boolean enabled, double alpha, double threshold,
-                                double temperature, int maxK) {}
+                                double temperature, int maxK,
+                                boolean monitorEnabled, double monitorAlpha,
+                                int monitorWarmup) {}
     }
 
     /**

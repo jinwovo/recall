@@ -16,7 +16,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 /**
- * RAG QA (docs/adr/0001, 0002, 0004, 0009, 0013): retrieve → size the context → sufficiency
+ * RAG QA (docs/adr/0001, 0002, 0004, 0009, 0013, 0016): retrieve → size the context → sufficiency
  * gate → assemble grounded prompt → stream answer over SSE, then grade the finished answer
  * with a post-hoc groundedness judge. Semantic-cache short-circuit and a per-question query
  * log included.
@@ -44,13 +44,14 @@ public class RagService {
     private final GroundednessJudge judge;
     private final SufficiencyCheck sufficiency;
     private final ConformalSetSizer contextSizer;
+    private final CoverageMonitor coverage;
     private final QueryLogService queryLog;
     private final ObjectMapper json;
 
     public RagService(SearchService search, EmbeddingClient embeddings, SemanticCacheService cache,
                       LlmClient llm, GroundednessJudge judge, SufficiencyCheck sufficiency,
-                      ConformalSetSizer contextSizer, QueryLogService queryLog,
-                      ObjectMapper json) {
+                      ConformalSetSizer contextSizer, CoverageMonitor coverage,
+                      QueryLogService queryLog, ObjectMapper json) {
         this.search = search;
         this.embeddings = embeddings;
         this.cache = cache;
@@ -58,6 +59,7 @@ public class RagService {
         this.judge = judge;
         this.sufficiency = sufficiency;
         this.contextSizer = contextSizer;
+        this.coverage = coverage;
         this.queryLog = queryLog;
         this.json = json;
     }
@@ -143,6 +145,10 @@ public class RagService {
 
         Flux<ServerSentEvent<String>> judging = judgeable ? Flux.just(sse("judging", "")) : Flux.empty();
         Flux<ServerSentEvent<String>> rest = judgment.flatMapMany(j -> {
+            // Feed the verdict to the coverage monitor (docs/adr/0016). This is the only
+            // coverage signal serving has — the true one needs a gold label — so the alarm
+            // it raises is the judge's view, with the caveats CoverageMonitor documents.
+            j.ifPresent(coverage::observe);
             // Never cache a judged-unsupported answer or an abstention — a semantic-cache hit
             // replays the answer verbatim and skips re-judging, making a hallucination (or a
             // sampling-artifact "I don't know") sticky across near-duplicate questions.

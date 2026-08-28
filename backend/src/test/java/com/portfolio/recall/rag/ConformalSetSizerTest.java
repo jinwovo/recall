@@ -42,7 +42,7 @@ class ConformalSetSizerTest {
                         new RecallProperties.Rag.Judge(false, 1),
                         new RecallProperties.Rag.Sufficiency(false, 0.35, 1),
                         new RecallProperties.Rag.Conformal(enabled, 0.10, threshold,
-                                temperature, maxK)),
+                                temperature, maxK, false, 0.05, 0)),
                 null);
         return new ConformalSetSizer(props, new SimpleMeterRegistry());
     }
@@ -171,7 +171,7 @@ class ConformalSetSizerTest {
                     new RecallProperties.Rag(
                             new RecallProperties.Rag.Judge(false, 1),
                             new RecallProperties.Rag.Sufficiency(false, 0.35, 1),
-                            new RecallProperties.Rag.Conformal(true, 0.10, 0.99, 1.0, 2)),
+                            new RecallProperties.Rag.Conformal(true, 0.10, 0.99, 1.0, 2, false, 0.05, 0)),
                     null);
             ConformalSetSizer capped = new ConformalSetSizer(props, meters);
             assertThat(capped.size(ranked(0.1, 0.1, 0.1, 0.1, 0.1, 0.1))).isEqualTo(2);
