@@ -270,9 +270,13 @@ correct behaviour. → [ADR 0011](docs/adr/0011-statistical-inference-eval.md)
 Everything above is available on its own, because none of it is specific to this system:
 
 ```bash
-pip install rag-eval-gate
+pip install retrieval-eval-gate       # `rag-eval-gate` on PyPI is an unrelated project
 rag-eval-gate power gold.jsonl        # what your gold set can resolve, before anything runs
+rag-eval-gate audit -n 10 -v 1.00 -b 0.70    # or audit a published table, with no data at all
 ```
+
+There is also a browser version that needs nothing installed:
+**[jinwovo.github.io/rag-eval-gate](https://jinwovo.github.io/rag-eval-gate/)**.
 
 → **[jinwovo/rag-eval-gate](https://github.com/jinwovo/rag-eval-gate)** — zero dependencies,
 and backend-agnostic in a way this repo's own harness is not: an HTTP URL template with a
