@@ -48,7 +48,7 @@ The system was engineered. The measurement was not. What follows is the second v
 
 ---
 
-## Three things that are now guarantees
+## Four things that are now guarantees
 
 ### 1. Evaluation that stays valid while you watch it
 
@@ -160,7 +160,61 @@ fixed top-K — a threshold outside `[0, 1]` is an unconfigured one, not a conse
 
 → [ADR 0013](docs/adr/0013-conformal-risk-control.md)
 
-### 3. A benchmark the harness can actually resolve
+### 3. The LLM judge, checked against a human for the first time
+
+`groundedness = 0.81` is a CHEAP-tier model's opinion of answers produced by the system it
+belongs to. If that judge runs eight points optimistic, the published number is eight points
+wrong and nothing in the pipeline notices — the interval machinery above would faithfully
+report a tight interval around the wrong value. Every RAG system has this problem, and at
+scale so do the *relevance* labels behind any large gold set.
+
+**Prediction-powered inference** ([Angelopoulos et al., *Science* 2023][ppi]; power-tuned
+as PPI++) is the way out. Hand-label a small sample, let the
+judge score everything, and subtract the bias measured on the labelled part:
+
+```
+theta = mean(hand labels) + lambda x ( mean_unlabelled(judge) - mean_labelled(judge) )
+```
+
+1,500 repetitions of the whole label-and-estimate cycle per row, 50 hand labels against
+2,050 judge-scored items, estimating a quantity whose true value is known exactly:
+
+| judge behaviour | judge only | hand labels only | **PPI** | PPI interval width | effective labels *(from 50)* |
+|---|:---:|:---:|:---:|:---:|:---:|
+| flattering, accurate | **0.0%** | 94.0% | **94.3%** | −67% | **474** |
+| flattering, noisy | **0.0%** | 94.2% | **93.5%** | −22% | 84 |
+| unbiased, noisy | 14.5% | 94.7% | **93.7%** | −22% | 85 |
+| uninformative | **0.0%** | 94.8% | **94.3%** | −1% | 51 |
+
+*First three columns: how often each method's published 95% interval actually contained the
+truth.* Averaging thousands of judge scores is not a 95% interval — it is a very narrow
+interval around whatever the judge believes, and when the judge is biased it is essentially
+never right. Even the "unbiased" judge fails, because scores clipped to `[0, 1]` acquire a
+bias near the boundary.
+
+Two properties make this worth the code. **Validity never depends on the judge being good** —
+the bias is measured, not assumed. And **a useless judge costs nothing**: λ is tuned to
+minimise variance, so a judge predicting noise gets λ ≈ 0 and the estimator collapses to the
+hand-label mean. The bottom row is that safety property working.
+
+```console
+$ python run_qa_eval.py gold.jsonl --human-labels judge-labels.jsonl
+
+judge alone      0.886   (no validity — the judge's opinion of its own system)
+hand labels only 0.625   [0.156, 1.094]  n=4
+PPI              0.637   [0.341, 0.934]  lambda=1.00
+judge bias       +0.250  (optimistic)
+effective labels 10      (from 4 actually written)
+```
+
+**This repo has not written those labels yet**, so `0.81` below stays marked as the judge's
+opinion rather than a measurement. The machinery, the file format and the refusal path all
+ship; the remaining work is a couple of hours of hand-grading, not a research project.
+
+→ [ADR 0015](docs/adr/0015-prediction-powered-inference.md) · `python eval/ppi_experiment.py`
+reproduces the tables.
+
+### 4. A benchmark the harness can actually resolve
 
 Every tool above kept reaching the same conclusion, so:
 
@@ -270,7 +324,7 @@ Because it is: if it computes nDCG wrong, every number downstream is wrong and n
 the build will say so.
 
 ```bash
-make eval-test     # 187 tests, standard library only, no stack, ~100s
+make eval-test     # 214 tests, standard library only, no stack, ~70s
 ```
 
 - **Closed forms** — `(α/2)^(1/n)` at `k = n`, `2^(1-k)` for a uniform improvement, R's
@@ -279,8 +333,10 @@ make eval-test     # 187 tests, standard library only, no stack, ~100s
   the test; SciPy cross-checks that skip when SciPy is absent.
 - **The guarantees, by simulation** — repeated calibrate-then-deploy cycles counting how often
   each promise actually breaks: BCa coverage against a skewed population, confidence-sequence
-  coverage under continuous inspection, conformal coverage on data the fit never saw, and
-  type-I error of the risk certificate.
+  coverage under continuous inspection, conformal coverage on data the fit never saw, type-I
+  error of the risk certificate, and PPI coverage against a deliberately biased judge — with
+  the negative control alongside it, since an estimator is only interesting if the thing it
+  replaces demonstrably fails.
 - **The harness end to end** — against a stubbed search backend whose metrics are derivable by
   hand, driving all four gate policies into both outcomes and asserting the sequential one's
   saving is real requests not sent.
@@ -411,6 +467,7 @@ by the eval harness, numbers published.
 | **Betting confidence sequences** | Waudby-Smith & Ramdas, **JRSS-B 2024** | the sequential gate |
 | **Conformal prediction, adaptive sets** | Romano, Sesia & Candès, NeurIPS 2020 | adaptive context sizing |
 | **Risk-controlling prediction sets** | Bates, Angelopoulos, Lei, Malik & Jordan, **JACM 2021** | calibrated abstention |
+| **Prediction-powered inference** | Angelopoulos, Bates, Fannjiang, Jordan & Zrnic, **Science 2023** | a valid interval for true groundedness from a biased judge |
 | **BEIR** | Thakur et al., NeurIPS 2021 D&B | `make beir` |
 
 GraphRAG / RAPTOR and late chunking were evaluated and deliberately deferred — the rejection
@@ -423,7 +480,7 @@ Measured via [`eval/run_qa_eval.py`](eval/run_qa_eval.py) with the free local pr
 
 | metric | value |
 |---|---|
-| groundedness (avg judge score) | **0.81** |
+| groundedness (avg judge score) | **0.81** ⚠️ *judge's opinion — no human anchor yet, see [ADR 0015](docs/adr/0015-prediction-powered-inference.md)* |
 | verdicts (8 judged) | 75% supported · 12% partial · 12% unsupported |
 | abstentions ("I don't know") | 2/10 — declined instead of hallucinating |
 | citation coverage | **100%** of generated answers contain `[n]` citations |
@@ -519,6 +576,7 @@ docs/adr/           every decision, including the ones that overturned earlier o
 - **[ADR 0012 — Anytime-valid evaluation: stop when the verdict is decided](docs/adr/0012-anytime-valid-evaluation.md)**
 - **[ADR 0013 — The constants that decide cost and hallucination become certificates](docs/adr/0013-conformal-risk-control.md)**
 - **[ADR 0014 — A benchmark the harness can actually resolve](docs/adr/0014-beir-benchmark-scale.md)**
+- **[ADR 0015 — The LLM judge is a measuring instrument, and it was never calibrated](docs/adr/0015-prediction-powered-inference.md)**
 
 ## Roadmap
 
@@ -547,3 +605,4 @@ MIT — see [`LICENSE`](LICENSE).
 [Waudby-Smith & Ramdas (JRSS-B, 2024)]: https://doi.org/10.1093/jrsssb/qkad009
 [Romano, Sesia & Candès, NeurIPS 2020]: https://arxiv.org/abs/2006.02544
 [Bates et al., JACM 2021]: https://arxiv.org/abs/2101.02703
+[ppi]: https://www.science.org/doi/10.1126/science.adi6000

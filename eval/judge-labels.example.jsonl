@@ -1,0 +1,4 @@
+{"query": "메시지가 재시도 때문에 중복 저장되는 걸 막으려면 어떻게 하나요?", "groundedness": 1.0, "note": "answer cited the idempotent-producer passage and said nothing beyond it"}
+{"query": "max.poll.interval.ms cooperative sticky assignor rebalance", "groundedness": 0.5, "note": "correct on rebalance, invented a default value the passage never gave"}
+{"query": "how do I keep cached data after the server restarts", "groundedness": 1.0}
+{"query": "allkeys-lru maxmemory-policy eviction", "groundedness": 0.0, "note": "described a policy that is not in any retrieved passage"}

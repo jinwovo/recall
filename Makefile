@@ -1,4 +1,4 @@
-.PHONY: up down logs backend frontend seed seed-corpus ingest eval eval-gate eval-sweep eval-test eval-stats eval-anytime beir beir-eval calibrate loadtest
+.PHONY: up down logs backend frontend seed seed-corpus ingest eval eval-gate eval-sweep eval-test eval-stats eval-anytime eval-ppi beir beir-eval calibrate loadtest
 
 up:            ## start infra (ES, Redis, Postgres, Kafka, MinIO, sidecar, Prometheus, Grafana)
 	docker compose up -d
@@ -41,6 +41,9 @@ eval-stats:    ## what the current gold set can and cannot resolve, before runni
 
 eval-anytime:  ## reproduce the anytime-evaluation experiment (docs/adr/0012) — no stack needed
 	cd eval && python anytime_experiment.py
+
+eval-ppi:      ## reproduce the judge-calibration experiment (docs/adr/0015) — no stack needed
+	cd eval && python ppi_experiment.py
 
 beir:          ## fetch a BEIR benchmark: make beir DATASET=scifact (300 queries, 5k docs)
 	cd eval && python beir.py $(or $(DATASET),scifact)

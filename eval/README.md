@@ -25,11 +25,13 @@ The one exception is `plot_anytime.py`, which draws documentation and gates noth
 | `stats.py` | BCa bootstrap, exact binomial, paired randomization test, Holm, design analysis |
 | `sequential.py` | anytime-valid confidence sequences; the early-stopping gate (ADR 0012) |
 | `conformal.py` | coverage and risk guarantees (ADR 0013) |
+| `ppi.py` | a valid interval for a quantity only a biased LLM judge scored (ADR 0015) |
 | `calibrate.py` | drives the API and writes the certificate + config to paste |
 | `power_report.py` | what a gold set can resolve, from the labels alone |
 | `beir.py` | fetch a BEIR benchmark into this repo's format (ADR 0014) |
 | `tune.py` | the nightly sweep, with the four guards that stop it selecting noise |
 | `anytime_experiment.py` | reproduces the ADR-0012 tables; `plot_anytime.py` draws them |
+| `ppi_experiment.py` | reproduces the ADR-0015 tables |
 | `_mock_reranker.py` | a stand-in `/api/search`, so the tests need no stack |
 
 ```bash
@@ -41,6 +43,8 @@ python power_report.py gold.jsonl                              # what this gold 
 python calibrate.py gold.jsonl                                 # certify context size + abstention
 python beir.py scifact                                         # 5,183 docs, 300 queries
 python anytime_experiment.py                                   # reproduce the ADR-0012 tables
+python ppi_experiment.py                                       # reproduce the ADR-0015 tables
+python run_qa_eval.py gold.jsonl --human-labels judge-labels.jsonl
 python -m unittest discover -s . -p "test_*.py"                # test the harness itself
 # RECALL_API=http://localhost:18080 python run_eval.py gold.jsonl
 ```
@@ -270,3 +274,32 @@ datasets print a warning that their binarised nDCG is not comparable
 Downloads are cached and resumable — paging 5,000 documents rate-limits partway through —
 and everything dropped in conversion is counted: judgements pointing outside the corpus,
 queries left with none, empty documents.
+
+## The judge is an instrument, and it was never calibrated
+
+`groundedness = 0.81` is a CHEAP-tier model's opinion of answers produced by the system it
+belongs to. If it runs eight points optimistic the published number is eight points wrong,
+and every interval in this directory would faithfully report a tight interval around it.
+
+`ppi.py` implements **prediction-powered inference** (Angelopoulos, Bates, Fannjiang, Jordan
+& Zrnic, *Science* 2023; power-tuned as PPI++,
+[ADR 0015](../docs/adr/0015-prediction-powered-inference.md)): hand-label a small sample,
+let the judge score everything, and subtract the bias measured on the labelled part.
+
+```bash
+python run_qa_eval.py gold.jsonl --human-labels judge-labels.jsonl
+```
+
+`judge-labels.example.jsonl` is the format — the judge's own 0 / 0.5 / 1 scale, because a
+rescaling is indistinguishable from a bias and the estimator would subtract it too. Fewer
+than two hand labels, or nothing left unlabelled, and it refuses rather than producing
+something shaped like a guarantee.
+
+Validity never depends on the judge being good; the bias is measured, not assumed. And a
+useless judge costs nothing — λ is tuned to minimise variance, so noise gets λ ≈ 0 and the
+estimator collapses to the hand-label mean. `make eval-ppi` reproduces the coverage tables,
+including the negative control: averaging the judge covers the truth **0%** of the time
+against a nominal 95%.
+
+The same estimator applies to LLM-written *relevance* labels, which is how a gold set gets
+past the few-hundred-query ceiling of [ADR 0014](../docs/adr/0014-beir-benchmark-scale.md).
