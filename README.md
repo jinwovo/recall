@@ -384,7 +384,7 @@ Because it is: if it computes nDCG wrong, every number downstream is wrong and n
 the build will say so.
 
 ```bash
-make eval-test     # 214 tests, standard library only, no stack, ~70s
+make eval-test     # 234 tests, standard library only, no stack, ~65s
 ```
 
 - **Closed forms** — `(α/2)^(1/n)` at `k = n`, `2^(1-k)` for a uniform improvement, R's
@@ -401,7 +401,7 @@ make eval-test     # 214 tests, standard library only, no stack, ~70s
   hand, driving all four gate policies into both outcomes and asserting the sequential one's
   saving is real requests not sent.
 
-Plus 50 backend unit tests and three Testcontainers integration suites against real ES, Kafka
+Plus 62 backend unit tests and three Testcontainers integration suites against real ES, Kafka
 and MinIO.
 
 ---
