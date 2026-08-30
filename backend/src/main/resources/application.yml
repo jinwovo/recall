@@ -70,6 +70,14 @@ recall:
     inline-max-bytes: ${INGEST_INLINE_MAX_BYTES:65536}    # larger docs travel as objectKey refs
   semantic-cache:
     threshold: ${SEMANTIC_CACHE_THRESHOLD:0.95}
+    # Every lookup pulls the whole hash — embeddings included — into the app and scans it,
+    # so this caps per-query latency and bandwidth, not only Redis memory. Past the cap new
+    # answers are refused (recall.semantic_cache.rejected), never evicted at random.
+    max-entries: ${SEMANTIC_CACHE_MAX_ENTRIES:1000}
+    # Armed when an entry first creates the hash and never refreshed: a sliding window never
+    # expires under steady traffic, which is when replaying an answer grounded in a corpus
+    # that has since been re-ingested is worst. The whole cache rolls over at once.
+    ttl-minutes: ${SEMANTIC_CACHE_TTL_MINUTES:1440}
   retrieval:
     candidates: 50            # fused candidates before rerank
     top-k: 8                  # passed to the LLM as context
@@ -105,6 +113,11 @@ recall:
       monitor-warmup: ${RAG_CONFORMAL_MONITOR_WARMUP:50}   # judged answers before the alarm can fire
   llm:                         # provider toggle: claude (default) | groq (free)
     provider: ${LLM_PROVIDER:claude}
+    # Output ceiling for every provider. A hard cut, not a hint — the answer stops
+    # mid-sentence when it binds, and a truncated answer is still judged and cached like a
+    # finished one. Sized for a grounded answer with citations; the CHEAP-tier one-word
+    # verdicts stop long before it.
+    max-tokens: ${LLM_MAX_TOKENS:4096}
     groq:
       base-url: ${GROQ_BASE_URL:https://api.groq.com/openai/v1}
       model: ${GROQ_MODEL:meta-llama/llama-4-scout-17b-16e-instruct}

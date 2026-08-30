@@ -27,7 +27,16 @@ public record RecallProperties(
                         int retryMaxAttempts, long retryBackoffMs,
                         int consumerConcurrency) {}
 
-    public record SemanticCache(double threshold) {}
+    /**
+     * Semantic cache (docs/adr/0002). {@code threshold} is the cosine similarity above which
+     * a cached answer is replayed.
+     *
+     * <p>The other two are bounds the scaffold was missing. Every lookup pulls the whole hash
+     * — 1024-dim embeddings included — into the app and scans it, so {@code maxEntries} caps
+     * per-query latency and bandwidth as much as Redis memory. {@code ttlMinutes} caps
+     * staleness: without it a cached answer outlives the corpus it was grounded in.
+     */
+    public record SemanticCache(double threshold, int maxEntries, long ttlMinutes) {}
 
     /** candidates: fused size before rerank; topK: context passed to the LLM; rrfK: RRF constant. */
     public record Retrieval(int candidates, int topK, int rrfK) {}
@@ -35,8 +44,15 @@ public record RecallProperties(
     /** Model tiering (docs/adr/0002). 'primary' avoids the Java reserved word 'default'. */
     public record Models(String primary, String balanced, String cheap) {}
 
-    /** LLM provider selection: claude (default) or groq (free, OpenAI-compatible). */
-    public record Llm(String provider, Groq groq, Ollama ollama) {
+    /**
+     * LLM provider selection: claude (default) or groq (free, OpenAI-compatible).
+     *
+     * <p>{@code maxTokens} is the output ceiling every provider is asked to honour. It is a
+     * hard cut, not a hint: the model stops mid-sentence when it binds, and a truncated
+     * answer still gets judged and cached like a finished one. Sized for a grounded answer
+     * with citations rather than for the one-word CHEAP-tier verdicts, which stop on their own.
+     */
+    public record Llm(String provider, long maxTokens, Groq groq, Ollama ollama) {
         public record Groq(String baseUrl, String model) {}
 
         public record Ollama(String baseUrl, String model) {}

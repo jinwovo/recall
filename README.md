@@ -401,7 +401,7 @@ make eval-test     # 214 tests, standard library only, no stack, ~70s
   hand, driving all four gate policies into both outcomes and asserting the sequential one's
   saving is real requests not sent.
 
-Plus 43 backend unit tests and three Testcontainers integration suites against real ES, Kafka
+Plus 50 backend unit tests and three Testcontainers integration suites against real ES, Kafka
 and MinIO.
 
 ---

@@ -34,11 +34,13 @@ public class ClaudeClient implements LlmClient {
     private final AnthropicClient client;
     private final RecallProperties props;
     private final MeterRegistry meters;
+    private final long maxTokens;
 
     public ClaudeClient(AnthropicClient client, RecallProperties props, MeterRegistry meters) {
         this.client = client;
         this.props = props;
         this.meters = meters;
+        this.maxTokens = props.llm().maxTokens();
     }
 
     /** Stream the answer token-by-token for SSE. The SDK is blocking, so iterate on boundedElastic. */
@@ -84,7 +86,9 @@ public class ClaudeClient implements LlmClient {
         // .model(String) is accepted; switch to Model.* constants if your SDK version requires it.
         return MessageCreateParams.builder()
                 .model(model)
-                .maxTokens(1024L)
+                // Configurable: max_tokens is a hard cut, and a truncated answer is still
+                // streamed, judged and cached like a complete one (recall.llm.max-tokens).
+                .maxTokens(maxTokens)
                 // Stable system prompt → prompt cache breakpoint (cache reads ≈ 0.1× input cost).
                 .systemOfTextBlockParams(List.of(
                         TextBlockParam.builder()

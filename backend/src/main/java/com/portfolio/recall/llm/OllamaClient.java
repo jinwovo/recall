@@ -23,11 +23,13 @@ public class OllamaClient implements LlmClient {
 
     private final WebClient web;
     private final String model;
+    private final long maxTokens;
     private final ObjectMapper json;
 
     public OllamaClient(WebClient.Builder builder, RecallProperties props, ObjectMapper json) {
         this.web = builder.baseUrl(props.llm().ollama().baseUrl()).build();
         this.model = props.llm().ollama().model();
+        this.maxTokens = props.llm().maxTokens();
         this.json = json;
     }
 
@@ -36,6 +38,7 @@ public class OllamaClient implements LlmClient {
         Map<String, Object> body = Map.of(
                 "model", model,
                 "stream", true,
+                "max_tokens", maxTokens,
                 "messages", List.of(
                         Map.of("role", "system", "content", system),
                         Map.of("role", "user", "content", userPrompt)));

@@ -24,6 +24,7 @@ public class GroqClient implements LlmClient {
 
     private final WebClient web;
     private final String model;
+    private final long maxTokens;
     private final ObjectMapper json;
 
     public GroqClient(WebClient.Builder builder, RecallProperties props, ObjectMapper json,
@@ -33,6 +34,7 @@ public class GroqClient implements LlmClient {
                 .defaultHeader("Authorization", "Bearer " + apiKey)
                 .build();
         this.model = props.llm().groq().model();
+        this.maxTokens = props.llm().maxTokens();
         this.json = json;
     }
 
@@ -41,6 +43,7 @@ public class GroqClient implements LlmClient {
         Map<String, Object> body = Map.of(
                 "model", model,
                 "stream", true,
+                "max_tokens", maxTokens,
                 "messages", List.of(
                         Map.of("role", "system", "content", system),
                         Map.of("role", "user", "content", userPrompt)));
