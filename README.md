@@ -428,7 +428,7 @@ and client-measured latency:
 ```bash
 cp .env.example .env                 # optional: ANTHROPIC_API_KEY, or use free Ollama
 docker compose up -d                 # ES (Nori), Redis, Postgres, Kafka, MinIO, sidecar, Grafana
-cd backend && gradle wrapper && ./gradlew bootRun
+cd backend && ./gradlew bootRun      # wrapper is committed; a JDK 21 is all you need
 cd frontend && npm install && npm run dev      # http://localhost:3000
 
 python scripts/seed_corpus.py                  # ingest the eval corpus (waits for indexing)
