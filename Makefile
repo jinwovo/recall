@@ -53,7 +53,7 @@ beir:          ## fetch a BEIR benchmark: make beir DATASET=scifact (300 queries
 
 beir-eval:     ## ingest a fetched BEIR benchmark and evaluate on it (needs the stack up)
 	python scripts/seed_corpus.py eval/beir-$(or $(DATASET),scifact)/corpus.jsonl --timeout 1800
-	cd eval && python run_eval.py beir-$(or $(DATASET),scifact)/gold.jsonl --json ../beir-results.json --markdown ../beir-summary.md
+	cd eval && python run_eval.py beir-$(or $(DATASET),scifact)/gold.jsonl --json ../docs/beir-results.json --markdown ../docs/beir-summary.md
 
 calibrate:     ## certify the context size and abstention threshold (docs/adr/0013)
 	cd eval && python calibrate.py $(or $(GOLD),gold.jsonl) --json ../calibration.json

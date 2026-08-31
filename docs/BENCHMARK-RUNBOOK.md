@@ -6,26 +6,61 @@ guessed, so the next person can decide whether their box is the right one before
 
 ## What it actually costs
 
-Measured on a 10-core laptop CPU (Windows, Docker Desktop, 7.5 GB to the VM), bge-m3 and
-bge-reranker-v2-m3 on CPU:
+Two machines have run this now. The second run corrected the first on three points, so both
+are here — the disagreements are the useful part.
 
-| stage | measured | notes |
+| | box A (first run) | box B (this run) |
 |---|---|---|
-| indexing | **~15 documents/minute** | 5,183 SciFact documents ⇒ **~6 hours** |
-| sidecar during indexing | 786% CPU, host at 100% | genuinely compute-bound, not misconfigured |
+| CPU | 10-core laptop | AMD Ryzen 7 H 255, 8 physical / 16 logical |
+| RAM to the Docker VM | 7.5 GB | 12.55 GB |
+| indexing | ~15 docs/min | **24.5 docs/min** |
+| 5,183 documents | ~6 hours | **3 h 40 m** |
+
+Fewer cores and it still indexed faster; the VM's memory is the only measured difference
+large enough to explain it. Do not read the per-box numbers as a law — read the *shape*:
+indexing is compute-bound on the sidecar, and search is dominated by reranking.
+
+**Search latency, measured on box B with the corpus fully indexed and nothing else
+running:**
+
+| stage | idle | notes |
+|---|---|---|
+| `mode=bm25` | **1.21 s** | |
+| `mode=vector` | **0.49 s** | |
+| `mode=hybrid` | **161–164 s** | cross-encoder over `candidates=50` |
+| `mode=hybrid&rerank=m3` | **87.9 s** | ADR 0008's cheaper strategy |
 | per-document embed | 3.9 s median | one document, one or two chunks |
-| `mode=bm25` search | 4.9 s | *while indexing was running* |
-| `mode=vector` search | 2.0 s | *while indexing was running* |
-| `mode=hybrid` search | 120–186 s | *while indexing was running* — see below |
 
-**The hybrid figure is contention, not the cost of reranking.** It did not scale with
-rerank depth — 186 s at `candidates=5` against 157 s at `candidates=10` — which is the
-signature of a starved process, not of more work. On an idle machine expect seconds. Do not
-quote these search numbers as latency; they exist here only to say "do not evaluate while
-you index."
+### Correction: the hybrid figure is reranking, not contention
 
-The honest summary: **this is an overnight job on a laptop CPU.** A GPU turns the indexing
-into minutes. More cores help roughly linearly until memory bandwidth binds.
+An earlier version of this runbook said the opposite — that 120–186 s hybrid searches were a
+starved process, and that an idle machine should "expect seconds." **Both claims were wrong,
+and the evidence for them was invalid.**
+
+The argument was that latency did not scale with rerank depth: 186 s at `candidates=5`
+against 157 s at `candidates=10`. But `TuningOverrides.CANDIDATES_MIN` is **10**, so
+`candidates=5` is clamped to 10 — the two measurements were the same configuration, and
+186 vs 157 was noise. Swept *above* the clamp, on an idle box, it is linear:
+
+| candidates | idle latency | per candidate |
+|---|---|---|
+| 10 | 27.8 s | 2.78 s |
+| 25 | 75.0 s | 3.00 s |
+| 50 (stock) | 161.2 s | 3.22 s |
+
+Three independent measurements agree on the stock setting: 161–164 s standalone, 161.2 s in
+the sweep, 163.6 s sustained across a 300-query evaluation. On a CPU reranker this is simply
+what bge-reranker-v2-m3 costs; a GPU changes it, an idle machine does not.
+
+**The consequence is the number that matters for planning:**
+
+```
+bm25    300 x ~1.2s  =    6 min
+vector  300 x ~0.5s  =  2.5 min
+hybrid  300 x  163s  = 13.6 hours
+---------------------------------
+make beir-eval         ~14 hours    <- an overnight job, not a coffee break
+```
 
 ## Before you start, on a bigger box
 
@@ -38,6 +73,17 @@ Three settings were tuned against a 10-core machine and should move with the har
 #       --alter --topic recall.ingestion --partitions 8
 export KAFKA_CONSUMER_CONCURRENCY=3
 ```
+
+**Set this equal to the partition count, not below it.** Kafka gives a partition to exactly
+one consumer, so with `concurrency=2` against 3 partitions one thread takes two partitions
+and processes them in series. That thread's partitions fall behind, the single-partition
+thread finishes early and then idles, and **the tail of the run is single-threaded**.
+Measured on box B: throughput fell 27.2 -> 13.9 docs/min the moment the short partition
+drained, and the sidecar halved from 493% to 236% CPU. Raising concurrency mid-run restores
+parallelism (236% -> 454%) but cannot repay the backlog already piled onto one partition —
+that debt is only ever paid serially. The `concurrency x OMP_NUM_THREADS <= physical cores`
+rule below is real, but it is the *second* constraint: satisfy the partition count first and
+lower `OMP_NUM_THREADS` if the product no longer fits.
 
 ```yaml
 # docker-compose.hostdev.yml — threads *per request*, not per machine.
@@ -75,6 +121,11 @@ docker exec recall-kafka /opt/kafka/bin/kafka-consumer-groups.sh \
     --bootstrap-server localhost:9092 --describe --group recall-ingestion
 ```
 
+On Windows Git Bash, prefix every `docker exec` with `MSYS_NO_PATHCONV=1`. MSYS rewrites the
+*container's* absolute path into a host path and the call fails with
+`stat C:/.../opt/kafka/bin/...: no such file or directory`, which reads like a broken image
+rather than a shell artefact.
+
 The log printing `indexed N chunks for doc …` proves nothing on its own — that is exactly
 what the redelivery loop looks like. Progress is `CURRENT-OFFSET` advancing.
 
@@ -92,7 +143,24 @@ curl -s 'localhost:9200/recall-docs/_search?size=0' -H 'Content-Type: applicatio
 
 # 6. Evaluate. Nothing else running: the search path shares the embedding sidecar with
 #    ingestion, and a contended measurement is worthless.
-make beir-eval
+#
+#    Do NOT use `make beir-eval` here. That target seeds *and* evaluates, and step 3 has
+#    already seeded — so it re-POSTs all 5,183 documents, the barrier passes instantly
+#    because the docIds are already in Elasticsearch, and the evaluation then runs against
+#    a sidecar busy re-embedding them. What is idempotent is the Elasticsearch upsert, not
+#    the embedding: every duplicate still costs its ~3s before the content hash discards it.
+#    Measured contaminated vs clean: 0.45 vs 2.4 sidecar embeds/second.
+cd eval && RECALL_SEARCH_TIMEOUT=600 python run_eval.py beir-scifact/gold.jsonl --json ../docs/beir-results.json --markdown ../docs/beir-summary.md
+```
+
+`RECALL_SEARCH_TIMEOUT` matters at this depth: the default is 180s and a stock
+`candidates=50` hybrid query takes ~163s, which is a 17-second margin across 300 queries.
+
+If you already re-seeded, do not wait it out — stop the backend, skip the duplicates, and
+re-verify with step 5. If it still reads 5183, everything skipped was a duplicate:
+
+```bash
+MSYS_NO_PATHCONV=1 docker exec recall-kafka /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group recall-ingestion --topic recall.ingestion --reset-offsets --to-latest --execute
 ```
 
 ## Once it finishes
@@ -105,13 +173,20 @@ cd eval && python run_eval.py beir-scifact/gold.jsonl --gate --gate-policy seque
 python calibrate.py beir-scifact/gold.jsonl --json ../calibration.json
 ```
 
-Paste `beir-summary.md` into the README's results section. SciFact's judgements are binary,
+`docs/beir-summary.md` is what the README's results section is built from — it is already
+filled in for SciFact. Regenerate both together. SciFact's judgements are binary,
 so its `nDCG@10` is directly comparable to the published BEIR table — that is why it is the
 default and why a graded dataset would need the caveat `beir.py` prints.
 
 `calibrate.py` writes the `recall.rag.conformal` block to paste into `application.yml`; a
 threshold is valid only for the alpha, temperature, corpus and reranker it was calibrated
 on, so it has to be redone per benchmark.
+
+**Budget for these separately.** `calibrate.py` issues its own `mode=hybrid` search for every
+query in the gold set and needs all three splits, so at SciFact scale it is a second ~14-hour
+run, not a postscript to the first. The sequential gate is the cheap one — it evaluates only
+`--gate-mode` (hybrid) and stops as soon as the verdict is settled.
+
 
 ## Why the sequential gate matters here
 
