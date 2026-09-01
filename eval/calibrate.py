@@ -36,7 +36,10 @@ Usage:
     python calibrate.py gold.jsonl --json certificate.json     # machine-readable
     python calibrate.py gold.jsonl --alpha 0.05 --risk-alpha 0.02
 Env:
-    RECALL_API (default http://localhost:8080)
+    RECALL_API             (default http://localhost:8080)
+    RECALL_SEARCH_TIMEOUT  per-request read timeout in seconds (default 180). Every query
+                           here is a `mode=hybrid` search, so at benchmark scale this runs
+                           for hours and one timeout past the retries loses all of it.
 
 Stdlib only.
 """
@@ -59,6 +62,11 @@ for stream in (sys.stdout, sys.stderr):
         stream.reconfigure(errors="replace")
 
 API = os.getenv("RECALL_API", "http://localhost:8080")
+# Matches run_eval.py. 180 is not a margin at benchmark scale — a stock candidates=50 hybrid
+# query was measured at 161-180s on a CPU reranker, so the default sits on top of the thing
+# it is meant to bound. Raise it for a real corpus rather than losing a multi-hour collect
+# to three retries on one slow query.
+SEARCH_TIMEOUT = float(os.getenv("RECALL_SEARCH_TIMEOUT", "180"))
 SPLIT_SEED = 20240917
 # Abstention thresholds to search, most conservative first — the fixed sequence the risk
 # certificate depends on. Reranker scores are normalised to [0, 1].
@@ -77,7 +85,7 @@ def search(query: str, attempts: int = 3) -> list[dict]:
     last: Exception | None = None
     for attempt in range(attempts):
         try:
-            with urllib.request.urlopen(url, timeout=180) as r:
+            with urllib.request.urlopen(url, timeout=SEARCH_TIMEOUT) as r:
                 return json.load(r).get("results", [])
         except (urllib.error.URLError, TimeoutError) as e:
             last = e
@@ -85,20 +93,53 @@ def search(query: str, attempts: int = 3) -> list[dict]:
     raise RuntimeError(f"search failed after {attempts} attempts: {url}") from last
 
 
-def collect(examples: list[dict]) -> list[dict]:
+def _load_cache(path: str | None) -> dict[str, dict]:
+    """Records already collected, keyed by query. A damaged cache is discarded, not fatal."""
+    if not path or not Path(path).exists():
+        return {}
+    try:
+        return {r["query"]: r for r in json.loads(Path(path).read_text(encoding="utf-8"))}
+    except (json.JSONDecodeError, KeyError, TypeError):
+        print(f"  cache at {path} is unreadable — collecting from scratch")
+        return {}
+
+
+def _save_cache(path: str, records: list[dict]) -> None:
+    """Write through a temporary file so an interrupted write cannot destroy the cache."""
+    tmp = Path(path).with_suffix(Path(path).suffix + ".tmp")
+    tmp.write_text(json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(path)
+
+
+def collect(examples: list[dict], cache_path: str | None = None) -> list[dict]:
     """One record per query: reranker scores and where the first relevant document landed.
 
     Scores stay at chunk level because that is what the serving path sizes over; the
     relevant index is the first chunk belonging to a gold document.
+
+    At benchmark scale this is the expensive half of the program — every query is a
+    `mode=hybrid` search, so a full SciFact pass is hours of wall clock. With `--records` the
+    cache is therefore written after *every* query rather than once at the end: a run that
+    dies on query 250 should cost one query to resume, not everything. Records are matched by
+    query text, so a partial cache resumes and a complete one skips collection entirely.
     """
-    records = []
+    done = _load_cache(cache_path)
+    if done:
+        print(f"  resuming: {len(done)} of {len(examples)} queries already cached")
+    records: list[dict] = []
     for i, example in enumerate(examples, start=1):
+        cached = done.get(example["query"])
+        if cached is not None:
+            records.append(cached)
+            continue
         gold = set(example["relevant_doc_ids"])
         results = search(example["query"])
         scores = [float(r.get("score", 0.0)) for r in results]
         relevant = next((j for j, r in enumerate(results) if r.get("docId") in gold), None)
         records.append({"query": example["query"], "scores": scores,
                         "relevant_index": relevant})
+        if cache_path:
+            _save_cache(cache_path, records)
         print(f"  [{i}/{len(examples)}] {len(scores)} candidates, "
               f"relevant at {relevant if relevant is not None else 'miss'}", flush=True)
     return records
@@ -372,22 +413,17 @@ def main() -> int:
     parser.add_argument("--split-seed", type=int, default=SPLIT_SEED)
     parser.add_argument("--json", metavar="PATH", help="write the certificate as JSON")
     parser.add_argument("--records", metavar="PATH",
-                        help="cache the collected scores here, or reuse them if present")
+                        help="cache the collected scores here, written after every query and "
+                             "resumed from if present — use it for anything at benchmark "
+                             "scale, where collection is hours long")
     args = parser.parse_args()
 
     with open(args.gold, encoding="utf-8") as f:
         examples = [json.loads(line) for line in f if line.strip()]
 
-    if args.records and Path(args.records).exists():
-        records = json.loads(Path(args.records).read_text(encoding="utf-8"))
-        print(f"reusing {len(records)} cached records from {args.records}\n")
-    else:
-        print(f"collecting reranker scores for {len(examples)} queries from {API}")
-        records = collect(examples)
-        if args.records:
-            Path(args.records).write_text(json.dumps(records, ensure_ascii=False, indent=2),
-                                          encoding="utf-8")
-        print()
+    print(f"collecting reranker scores for {len(examples)} queries from {API}")
+    records = collect(examples, args.records)
+    print()
 
     fitting, held_out = split(records, args.fit_fraction, args.split_seed)
     if args.temperature is None:

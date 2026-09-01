@@ -204,3 +204,65 @@ class QueriesForRiskBoundTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class RecordsCacheTest(unittest.TestCase):
+    """Collection is the expensive half, so `--records` has to survive the run dying.
+
+    At benchmark scale every query here is a `mode=hybrid` search — hours of wall clock for
+    one pass. The cache used to be written once, after the last query, which meant the one
+    situation it existed for (a run that dies partway) was exactly the one it could not
+    help. These tests pin the resume contract instead of the file format.
+    """
+
+    EXAMPLES = [{"query": f"q{i}", "relevant_doc_ids": [f"D{i}"]} for i in range(1, 6)]
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.cache = os.path.join(self._tmp.name, "records.json")
+        self.calls: list[str] = []
+        real = calibrate.search
+
+        def counting_search(query, attempts=3):
+            self.calls.append(query)
+            return [{"docId": "D" + query[1:], "score": 0.9}, {"docId": "X", "score": 0.1}]
+
+        calibrate.search = counting_search
+        self.addCleanup(lambda: setattr(calibrate, "search", real))
+
+    def collect(self, cache_path=None):
+        with redirect_stdout(io.StringIO()):
+            return calibrate.collect(self.EXAMPLES, cache_path)
+
+    def test_every_query_is_durable_before_the_next_one_runs(self):
+        # The point of the change: after query n the cache already holds n records, so a run
+        # killed at any moment resumes having lost at most the query in flight.
+        self.collect(self.cache)
+        with open(self.cache, encoding="utf-8") as f:
+            self.assertEqual(len(json.load(f)), 5)
+
+    def test_a_complete_cache_spends_no_queries(self):
+        self.collect(self.cache)
+        self.calls.clear()
+        self.assertEqual(self.collect(self.cache), self.collect(self.cache))
+        self.assertEqual(self.calls, [])
+
+    def test_a_partial_cache_collects_only_what_is_missing(self):
+        full = self.collect(self.cache)
+        with open(self.cache, "w", encoding="utf-8") as f:
+            json.dump(full[:2], f)
+        self.calls.clear()
+        resumed = self.collect(self.cache)
+        self.assertEqual(self.calls, ["q3", "q4", "q5"])
+        self.assertEqual(resumed, full)
+
+    def test_a_damaged_cache_costs_queries_rather_than_the_run(self):
+        # A half-written file from a kill must not be a crash on the next attempt.
+        with open(self.cache, "w", encoding="utf-8") as f:
+            f.write('[{"query": "q1", "scores": [0.9]')
+        self.assertEqual(len(self.collect(self.cache)), 5)
+        self.assertEqual(len(self.calls), 5)
+
+    def test_collection_without_a_cache_is_unchanged(self):
+        self.assertEqual(self.collect(None), self.collect(self.cache))
