@@ -194,3 +194,59 @@ At benchmark scale a query stops being free. `--gate-policy sequential` stops th
 verdict is settled and leaves 70–90% of the query budget unspent
 ([ADR 0012](adr/0012-anytime-valid-evaluation.md)) — the difference between an evaluation
 you run on every pull request and one you run when you remember to.
+
+### The gate's default thresholds belong to a different corpus
+
+`run_eval.py` defaults to `--min-recall5 0.90 --min-mrr10 0.85 --min-ndcg10 0.85`. Those were
+set against this repo's own gold set — 24 documents, 10 queries — where hybrid scores
+Recall@5 1.00 and MRR@10 0.95. SciFact is a real benchmark of 5,183 documents, and hybrid
+scores 0.802 and 0.704 on it. **Run the command above unchanged and the gate the benchmark
+exists to make meaningful fails on the benchmark**, having measured nothing except that the
+thresholds came from somewhere else.
+
+It fails fast, at least: 32 of 300 queries, 89% of the budget unspent, stopping the moment
+`mrr@10` settles because a red build does not need the other two metrics confirmed. That is
+the ADR-0012 saving working exactly as advertised at benchmark scale — the one claim in this
+runbook that survived being checked.
+
+Pass thresholds explicitly, and pick them by replaying the finished run rather than guessing.
+Every stopping point below was computed offline from `docs/beir-results.json` with the same
+`sequential` module and seed, then confirmed against the live run:
+
+| thresholds (R@5 / MRR@10 / nDCG@10) | stops at | verdict | wall clock |
+|---|---|---|---|
+| 0.90 / 0.85 / 0.85 (**stock**) | 32/300 | FAIL | 1.5 h |
+| 0.76 / 0.66 / 0.69 (95% CI lower bounds) | 300/300 | **never settles** | 14.2 h |
+| 0.71 / 0.61 / 0.64 | 245/300 | pass | 11.6 h |
+| 0.66 / 0.56 / 0.59 | 82/300 | pass | 3.9 h |
+| 0.60 / 0.50 / 0.55 | 64/300 | pass | 3.0 h |
+
+The second row is the trap worth naming. Setting the bar at the measured 95% CI lower bound
+looks principled and is the worst option on the list: an anytime-valid confidence sequence is
+conservative, so certifying "above 0.76" when the truth is 0.802 needs more evidence than 300
+queries carry at alpha=0.05. It spends the entire budget and returns `undecided` on all three
+metrics — fourteen hours for no verdict. This is the same resolution limit `power_report.py`
+prints; a sequential gate does not escape it, it just discovers it slowly.
+
+Both live runs landed exactly where the replay said they would, so trust the replay before
+spending the hours: stock stopped at 32/300 with `mrr@10` failed, and 0.66/0.56/0.59 stopped
+at 82/300 with all three passed. Note which one was cheaper. A failure only has to break one
+metric, so it short-circuits and leaves 89% of the budget unspent; a pass has to certify
+every metric and leaves 73%. Both ends of this runbook's "70-90%" claim, measured.
+
+Leave enough room between the threshold and the measured value for the sequence to close.
+Roughly 0.10 below the point estimate settles in a quarter of the budget and still catches a
+~15% relative regression:
+
+```bash
+cd eval && RECALL_SEARCH_TIMEOUT=600 python run_eval.py beir-scifact/gold.jsonl \
+    --gate --gate-policy sequential \
+    --min-recall5 0.66 --min-mrr10 0.56 --min-ndcg10 0.59
+```
+
+One more reading note: the scores printed at an early stop are the sample the gate stopped
+on, not an estimate of system quality, and it misses in both directions — the stock run
+reports `mrr@10 = 0.615` over its 32 queries and the 0.66/0.56/0.59 run reports 0.756 over
+its 82, against 0.704 over all 300. Quote the full run for performance; quote the gate only
+for its verdict.
+
