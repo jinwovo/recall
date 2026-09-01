@@ -41,7 +41,10 @@ Usage:
         --baseline-json baseline.json                                 # paired regression
     python run_eval.py gold.jsonl --gate --gate-policy sequential     # stop when decided
 Env:
-    RECALL_API (default http://localhost:8080)
+    RECALL_API             (default http://localhost:8080)
+    RECALL_SEARCH_TIMEOUT  per-request read timeout in seconds (default 180). A hybrid
+                           query costs ~3s per reranked candidate on a CPU reranker, so
+                           raise this before sweeping deeper than the stock candidates=50.
 
 Stdlib only — no dependencies to install in CI. Ships `stats.py` and `sequential.py`
 beside it.
@@ -65,6 +68,13 @@ for stream in (sys.stdout, sys.stderr):
         stream.reconfigure(errors="replace")
 
 API = os.getenv("RECALL_API", "http://localhost:8080")
+# Per-request read timeout. Reranking is the whole cost of a hybrid query and it scales
+# with rerank depth, so the right value is a property of the corpus and the hardware, not
+# of this file: on a CPU reranker, bge-reranker-v2-m3 spends ~3s per candidate, which puts
+# the stock candidates=50 at ~160s on a machine where bm25 answers in ~1s. 180 matches
+# calibrate.py and tune.py, which call the same endpoint; raise it for a deeper sweep or a
+# slower box rather than discovering the ceiling 300 queries in.
+SEARCH_TIMEOUT = float(os.getenv("RECALL_SEARCH_TIMEOUT", "180"))
 DEFAULT_MODES = ["bm25", "vector", "hybrid"]      # what CI sweeps — deterministic, no LLM
 # Experimental modes (docs/adr/0008) opt in via --modes; each maps to API query params.
 MODE_PARAMS = {
@@ -103,7 +113,7 @@ def search(query: str, mode: str, attempts: int = 3) -> list[str]:
     last: Exception | None = None
     for attempt in range(attempts):
         try:
-            with urllib.request.urlopen(url, timeout=120) as r:
+            with urllib.request.urlopen(url, timeout=SEARCH_TIMEOUT) as r:
                 data = json.load(r)
             seen: dict[str, None] = {}
             for chunk in data.get("results", []):
