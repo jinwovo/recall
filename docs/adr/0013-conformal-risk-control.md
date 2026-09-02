@@ -181,3 +181,55 @@ replacing it.
 **Skip the temperature split and pick T by eye.** Half the code, and it silently costs the
 entire benefit when the score scale changes. The failure mode is a passing report with no
 improvement in it, which is the worst kind.
+
+## Amendment (2026-09-02) — what 300 SciFact queries exposed
+
+The first real calibration run against a benchmark corpus — 5,183 documents, 300 queries,
+reranker scores collected through the live serving path — produced a certificate that failed
+its own held-out check. The tool said so plainly, which is the part that worked:
+
+```
+held-out coverage  80.6% [71.8%, 87.5%] on 108 queries  <- below the promise, and not by
+                                                           sampling noise
+NOTE: max-k truncated 21% of calibration sets - on those queries the cap, not alpha, is the
+      binding promise.
+```
+
+**`max-k` does not merely override the certificate; at a high enough truncation share it
+voids it.** The conformal quantile picks a set size per query. When `max-k` cuts that set,
+the passage the quantile included may be the one removed, so measured coverage falls below
+`1 - alpha` while calibration still reports a successful fit. Nothing in the fit notices —
+the truncation happens after the quantile is chosen.
+
+Swept against the same collected scores, `alpha = 0.10`:
+
+| `max-k` | sets truncated | held-out coverage | verdict |
+|---|---|---|---|
+| 12 (the shipped default) | 21% | 80.6% [71.8%, 87.5%] | CI excludes 90% |
+| 20 | 18% | 84.3% [76.0%, 90.6%] | CI excludes 90% |
+| 30 | 0% | 85.2% [77.1%, 91.3%] | consistent with the promise |
+| 50 | 0% | 85.2% [77.1%, 91.3%] | unchanged from 30 |
+
+Mean context was 5.3 passages at both 12 and 30. The cap was never shaping the typical
+query; it was silently amputating the tail — which is exactly where a coverage guarantee
+lives. Raising it costs nothing on average and is the difference between a certificate that
+holds and one that does not.
+
+This is why `calibrate.py` prints the truncation share rather than only the threshold, and
+why `application.yml` now carries the measurement beside the knob. A `max-k` chosen as a cost
+control has to be re-read as part of the promise.
+
+### Two other things the run recorded
+
+**The abstention certificate holds but is not usable as calibrated.** Risk came out 0.0%
+against a 5% target on held-out, at the price of abstaining on 82.5% of queries. The walk
+stopped one step short of a threshold that would answer 32% of queries at 0.9% observed
+risk — it needed ~116 calibration queries to certify and had 108. As the tool puts it: *the
+gap is evidence, not safety.* A larger gold set, not a looser target, is the fix.
+
+**Collection is the expensive half and it is now resumable.** Every query is a `mode=hybrid`
+search, ~163s on a CPU reranker, so a SciFact pass is ~14 hours. `--records` now writes after
+every query through a temp file and a rename, and resumes by query text. That was not
+academic: this run died at 145/300 to an unrelated kernel bugcheck and resumed having lost a
+single query. Every table above was then computed from the same cache in seconds — the sweeps
+cost nothing once the scores exist.

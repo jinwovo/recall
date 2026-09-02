@@ -102,7 +102,16 @@ recall:
       alpha: ${RAG_CONFORMAL_ALPHA:0.10}          # miss the relevant passage at most 10% of the time
       threshold: ${RAG_CONFORMAL_THRESHOLD:-1}    # -1 = uncalibrated; sizing stays off
       temperature: ${RAG_CONFORMAL_TEMPERATURE:1.0}
-      max-k: ${RAG_CONFORMAL_MAX_K:12}            # hard context cap; overrides the certificate when it binds
+      # Hard context cap. It overrides the certificate when it binds — and when it binds
+      # often enough, it *voids* it: a truncated set can miss the passage the quantile
+      # included, so measured coverage falls below alpha while calibration still reports
+      # success. Measured on SciFact (docs/BENCHMARK-RUNBOOK.md): at 12 the cap truncated
+      # 21% of calibration sets and held-out coverage came out 80.6% [71.8, 87.5] against a
+      # 90% promise; at 30 it truncated none and coverage was 85.2% [77.1, 91.3], consistent
+      # with the promise. Mean context was 5.3 passages either way — the cap only changes the
+      # tail. calibrate.py prints the truncation share; if it is not 0, raise this or accept
+      # that the cap, not alpha, is the real promise.
+      max-k: ${RAG_CONFORMAL_MAX_K:12}
       # Is the certificate above still true? (docs/adr/0016) A threshold calibrated once is
       # valid only while traffic matches the distribution it was fitted on, and that failure
       # is silent. The monitor tracks the judge's miscoverage rate with an anytime-valid

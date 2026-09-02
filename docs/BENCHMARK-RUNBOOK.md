@@ -187,6 +187,53 @@ query in the gold set and needs all three splits, so at SciFact scale it is a se
 run, not a postscript to the first. The sequential gate is the cheap one — it evaluates only
 `--gate-mode` (hybrid) and stops as soon as the verdict is settled.
 
+### What calibrating on SciFact actually produced
+
+Both closing steps were run. Results and the collected scores are committed:
+[`docs/beir-calibration.json`](beir-calibration.json) and
+[`docs/beir-calibration-records.json`](beir-calibration-records.json).
+
+**Use `--records`.** Collection is one `mode=hybrid` search per query — ~163s each, so ~14
+hours for SciFact — and it is the only expensive part. The cache is written after every query
+and resumed by query text, so a run that dies costs one query rather than the day. This run
+did die at 145/300, to a kernel bugcheck unrelated to any of this, and resumed cleanly. Every
+sweep below was then recomputed from that cache in seconds.
+
+```bash
+cd eval && RECALL_SEARCH_TIMEOUT=600 python calibrate.py beir-scifact/gold.jsonl \
+    --alpha 0.1 --max-k 30 \
+    --json ../docs/beir-calibration.json \
+    --records ../docs/beir-calibration-records.json
+```
+
+**`--max-k 30`, not the shipped 12, and the difference is the whole guarantee.** At 12 the
+cap truncated 21% of calibration sets and held-out coverage came out 80.6% [71.8%, 87.5%]
+against a 90% promise — a confidence interval that excludes the target, which the tool flags
+as "below the promise, and not by sampling noise". At 30 nothing is truncated and coverage is
+85.2% [77.1%, 91.3%], consistent with the promise. Mean context is 5.3 passages either way:
+the cap was never shaping the typical query, only amputating the tail where the guarantee
+lives. See the [ADR 0013 amendment](adr/0013-conformal-risk-control.md) for the full sweep.
+
+The certificate that resulted, valid for this corpus and reranker only:
+
+```yaml
+recall.rag.conformal:
+  enabled: true
+  alpha: 0.1
+  threshold: 0.236896
+  temperature: 0.35
+  max-k: 30
+```
+
+Do not paste that into `application.yml` as a default. It is a SciFact number.
+
+**The abstention half certifies but is not usable as calibrated:** risk 0.0% against a 5%
+target on held-out, at the price of abstaining on 82.5% of queries. The search stopped one
+step short of a threshold answering 32% of queries at 0.9% observed risk, needing ~116
+calibration queries against the 108 this split provides. That is a sample-size result, not a
+safety one — a larger gold set fixes it and a looser target does not.
+
+
 
 ## Why the sequential gate matters here
 
