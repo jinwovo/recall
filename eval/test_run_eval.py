@@ -390,3 +390,74 @@ class SequentialGateWordingTest(unittest.TestCase):
         rows = self.rows("budget exhausted", {"mrr@10": "undecided"}, used=200)
         self.assertIn("gold set too small", rows["mrr@10"]["detail"])
         self.assertFalse(rows["mrr@10"]["pass"])
+
+
+class ScoreCacheTest(unittest.TestCase):
+    """A sweep must not throw away the modes that already finished.
+
+    The report is written only once every mode is done, so a failure in the last mode used
+    to discard the earlier ones — at benchmark scale, hours of completed work for a fault in
+    the part still running. These tests pin the resume contract by counting the searches
+    actually issued, because "did it avoid the network" is the only thing that matters here.
+    """
+
+    GOLD = [{"query": f"q{i}", "relevant_doc_ids": ["D1"]} for i in range(1, 6)]
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.path = os.path.join(self._tmp.name, "scores.json")
+        self.calls: list[tuple[str, str]] = []
+        real = run_eval.search
+
+        def counting_search(query, mode, attempts=3):
+            self.calls.append((mode, query))
+            return ["D1", "D2", "D3"]
+
+        run_eval.search = counting_search
+        self.addCleanup(lambda: setattr(run_eval, "search", real))
+
+    def sweep(self, modes=("bm25", "hybrid"), path=None):
+        with redirect_stdout(io.StringIO()):
+            cache = run_eval.ScoreCache(self.path if path is None else path)
+            return {m: run_eval.evaluate_mode(self.GOLD, m, cache) for m in modes}
+
+    def test_a_finished_mode_is_not_scored_twice(self):
+        # The bug this replaces: hybrid failing discarded a completed bm25 sweep.
+        self.sweep()
+        with open(self.path, encoding="utf-8") as f:
+            cached = json.load(f)
+        cached["hybrid"] = cached["hybrid"][:2]
+        with open(self.path, "w", encoding="utf-8") as f:
+            json.dump(cached, f)
+
+        self.calls.clear()
+        self.sweep()
+        self.assertEqual([m for m, _ in self.calls], ["hybrid"] * 3)
+
+    def test_every_query_is_durable_before_the_next_one_runs(self):
+        self.sweep(modes=("bm25",))
+        with open(self.path, encoding="utf-8") as f:
+            self.assertEqual(len(json.load(f)["bm25"]), len(self.GOLD))
+
+    def test_a_complete_cache_spends_no_searches(self):
+        first = self.sweep()
+        self.calls.clear()
+        self.assertEqual(self.sweep(), first)
+        self.assertEqual(self.calls, [])
+
+    def test_a_damaged_cache_costs_searches_rather_than_the_run(self):
+        with open(self.path, "w", encoding="utf-8") as f:
+            f.write('{"bm25": [{"query"')
+        self.sweep(modes=("bm25",))
+        self.assertEqual(len(self.calls), len(self.GOLD))
+
+    def test_modes_do_not_read_each_others_scores(self):
+        # Same query text, different mode: reuse across modes would silently equate them.
+        self.sweep(modes=("bm25",))
+        self.calls.clear()
+        self.sweep(modes=("hybrid",))
+        self.assertEqual([m for m, _ in self.calls], ["hybrid"] * len(self.GOLD))
+
+    def test_running_without_a_cache_is_unchanged(self):
+        self.assertEqual(self.sweep(path=""), self.sweep(path=""))

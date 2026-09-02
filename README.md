@@ -407,7 +407,7 @@ Because it is: if it computes nDCG wrong, every number downstream is wrong and n
 the build will say so.
 
 ```bash
-make eval-test     # 239 tests, standard library only, no stack, ~65s
+make eval-test     # 245 tests, standard library only, no stack, ~65s
 ```
 
 - **Closed forms** — `(α/2)^(1/n)` at `k = n`, `2^(1-k)` for a uniform improvement, R's

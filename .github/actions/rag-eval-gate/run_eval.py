@@ -40,6 +40,7 @@ Usage:
     python run_eval.py gold.jsonl --gate --gate-policy regression \\
         --baseline-json baseline.json                                 # paired regression
     python run_eval.py gold.jsonl --gate --gate-policy sequential     # stop when decided
+    python run_eval.py gold.jsonl --records scores.json               # resumable; see below
 Env:
     RECALL_API             (default http://localhost:8080)
     RECALL_SEARCH_TIMEOUT  per-request read timeout in seconds (default 180). A hybrid
@@ -58,6 +59,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from pathlib import Path
 
 import sequential
 import stats
@@ -125,8 +127,56 @@ def search(query: str, mode: str, attempts: int = 3) -> list[str]:
     raise RuntimeError(f"search failed after {attempts} attempts: {url}") from last
 
 
-def score_query(example: dict, mode: str) -> dict:
+class ScoreCache:
+    """Scored queries keyed by mode and query text, persisted after every one.
+
+    A sweep is one search per query per mode, and at benchmark scale the reranked mode is
+    ~163s of that — half a day for SciFact. The batch path builds every mode before anything
+    is written, so a failure in the last mode used to throw away the modes that had already
+    finished: this is the fix that makes the unit of loss one query instead of the run. It
+    also resumes across a machine that simply died, which is not hypothetical.
+
+    Records are matched by query text, so a partial cache resumes and a complete one skips
+    the network entirely. Scores are a pure function of the index, so reuse is only wrong if
+    the corpus changed underneath — point --records somewhere new when it does.
+    """
+
+    def __init__(self, path: str | None):
+        self.path = path
+        self.by_mode: dict[str, dict[str, dict]] = {}
+        if not path or not Path(path).exists():
+            return
+        try:
+            raw = json.loads(Path(path).read_text(encoding="utf-8"))
+            self.by_mode = {m: {r["query"]: r for r in rs} for m, rs in raw.items()}
+        except (json.JSONDecodeError, KeyError, TypeError, AttributeError):
+            # A half-written file from a kill is not a reason to refuse to run.
+            print(f"  cache at {path} is unreadable — scoring from scratch")
+            self.by_mode = {}
+
+    def get(self, mode: str, query: str) -> dict | None:
+        return self.by_mode.get(mode, {}).get(query)
+
+    def put(self, mode: str, record: dict) -> None:
+        self.by_mode.setdefault(mode, {})[record["query"]] = record
+        if not self.path:
+            return
+        # Temp file and rename: an interrupted write must not destroy what is already saved.
+        payload = {m: list(rs.values()) for m, rs in self.by_mode.items()}
+        tmp = Path(self.path).with_suffix(Path(self.path).suffix + ".tmp")
+        tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(self.path)
+
+    def count(self, mode: str) -> int:
+        return len(self.by_mode.get(mode, {}))
+
+
+def score_query(example: dict, mode: str, cache: "ScoreCache | None" = None) -> dict:
     """Retrieve for one query and score it — the unit both the batch and sequential paths use."""
+    if cache is not None:
+        cached = cache.get(mode, example["query"])
+        if cached is not None:
+            return cached
     gold = set(example["relevant_doc_ids"])
     ranked = search(example["query"], mode)
 
@@ -142,7 +192,7 @@ def score_query(example: dict, mode: str) -> dict:
     idcg = sum(1.0 / math.log2(i + 2) for i in range(min(len(gold), RETRIEVE_K)))
     ndcg = dcg / idcg if idcg else 0.0
 
-    return {
+    record = {
         "query": example["query"],
         "gold": sorted(gold),
         "ranked": ranked,
@@ -152,6 +202,9 @@ def score_query(example: dict, mode: str) -> dict:
         "rr": rr,
         "ndcg": ndcg,
     }
+    if cache is not None:
+        cache.put(mode, record)
+    return record
 
 
 def aggregate(per_query: list[dict]) -> dict:
@@ -165,12 +218,15 @@ def aggregate(per_query: list[dict]) -> dict:
     }
 
 
-def evaluate_mode(examples: list[dict], mode: str) -> dict:
-    return aggregate([score_query(ex, mode) for ex in examples])
+def evaluate_mode(examples: list[dict], mode: str, cache: "ScoreCache | None" = None) -> dict:
+    if cache is not None and cache.count(mode):
+        print(f"  {mode}: reusing {cache.count(mode)} of {len(examples)} cached queries")
+    return aggregate([score_query(ex, mode, cache) for ex in examples])
 
 
 def evaluate_sequential(examples: list[dict], mode: str, thresholds: dict[str, float],
-                        alpha: float, seed: int) -> tuple[dict, dict]:
+                        alpha: float, seed: int,
+                        cache: "ScoreCache | None" = None) -> tuple[dict, dict]:
     """Retrieve query by query and stop as soon as the gate's verdict is settled.
 
     This is where the saving is actually taken: the loop exits before the remaining
@@ -192,7 +248,7 @@ def evaluate_sequential(examples: list[dict], mode: str, thresholds: dict[str, f
     stop_reason = "budget exhausted"
 
     for example in ordered:
-        scored = score_query(example, mode)
+        scored = score_query(example, mode, cache)
         per_query.append(scored)
         for metric, gate in gates.items():
             gate.update(scored[METRIC_TO_QUERY_KEY[metric]])
@@ -527,6 +583,10 @@ def main() -> int:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("gold", nargs="?", default="queries.example.jsonl",
                         help="JSONL with {query, relevant_doc_ids} per line")
+    parser.add_argument("--records", metavar="PATH",
+                        help="cache scored queries here, written after every one and resumed "
+                             "from if present — use it at benchmark scale, where a sweep is "
+                             "hours and the report is only written once every mode is done")
     parser.add_argument("--json", metavar="PATH", help="write full results as JSON")
     parser.add_argument("--markdown", metavar="PATH",
                         help="write a markdown report (GitHub step summary friendly)")
@@ -576,6 +636,8 @@ def main() -> int:
     thresholds = {"recall@5": args.min_recall5, "mrr@10": args.min_mrr10,
                   "ndcg@10": args.min_ndcg10}
 
+    cache = ScoreCache(args.records)
+
     # A sequential gate answers one question as cheaply as possible; sweeping other modes
     # to fill a comparison table would spend exactly the queries it exists to save.
     sequential_run = None
@@ -585,11 +647,11 @@ def main() -> int:
                   f"skipping {[m for m in modes if m != args.gate_mode]}\n")
         modes = [args.gate_mode]
         gate_result, sequential_run = evaluate_sequential(
-            examples, args.gate_mode, thresholds, ALPHA, args.sequential_seed)
+            examples, args.gate_mode, thresholds, ALPHA, args.sequential_seed, cache)
         results = {args.gate_mode: gate_result}
         baseline_mode = args.gate_mode
     else:
-        results = {mode: evaluate_mode(examples, mode) for mode in modes}
+        results = {mode: evaluate_mode(examples, mode, cache) for mode in modes}
 
     comparison = design = None
     if not args.no_stats:

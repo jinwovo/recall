@@ -64,3 +64,6 @@ eval/beir-*/
 
 # Host-run backend log (docker-compose.hostdev.yml flow).
 backend-run.log
+
+# run_eval.py --records cache: a resume aid, not a result (docs/beir-results.json is).
+docs/beir-scores.json

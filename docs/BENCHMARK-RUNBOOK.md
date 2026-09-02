@@ -150,8 +150,14 @@ curl -s 'localhost:9200/recall-docs/_search?size=0' -H 'Content-Type: applicatio
 #    a sidecar busy re-embedding them. What is idempotent is the Elasticsearch upsert, not
 #    the embedding: every duplicate still costs its ~3s before the content hash discards it.
 #    Measured contaminated vs clean: 0.45 vs 2.4 sidecar embeds/second.
-cd eval && RECALL_SEARCH_TIMEOUT=600 python run_eval.py beir-scifact/gold.jsonl --json ../docs/beir-results.json --markdown ../docs/beir-summary.md
+cd eval && RECALL_SEARCH_TIMEOUT=600 python run_eval.py beir-scifact/gold.jsonl --json ../docs/beir-results.json --markdown ../docs/beir-summary.md --records ../docs/beir-scores.json
 ```
+
+`--records` for the same reason `calibrate.py` needs it: the report is written only once
+every mode has finished, so without it a fault in `hybrid` throws away the `bm25` and
+`vector` sweeps that already completed. This run learned that the expensive way — the first
+attempt died on hybrid's first query and discarded 300 finished bm25 and vector queries.
+Scored queries are now cached after every one and resumed by query text, per mode.
 
 `RECALL_SEARCH_TIMEOUT` matters at this depth: the default is 180s and a stock
 `candidates=50` hybrid query takes ~163s, which is a 17-second margin across 300 queries.
