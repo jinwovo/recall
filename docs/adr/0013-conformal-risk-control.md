@@ -219,6 +219,25 @@ This is why `calibrate.py` prints the truncation share rather than only the thre
 why `application.yml` now carries the measurement beside the knob. A `max-k` chosen as a cost
 control has to be re-read as part of the promise.
 
+### Why the repository's own experiment could not have caught this
+
+The 800-query run in the README — `alpha = 0.10` against `eval/_mock_reranker.py`, the one
+advertised as reproducible without the stack — reports `cap_binds: 0%` and
+`guarantee_intact: true`. Re-run while writing this amendment, it still reproduces to the
+digit: 192/288/320 splits, mean K 5.0 against a fixed 9, held-out coverage 90.2%
+[86.3%, 93.4%], 44% fewer prompt tokens.
+
+So the cap never binds there, and no amount of re-running that experiment would have
+surfaced the failure above. The mock emits confident, well-separated scores; the conformal
+quantile stays well under 12 and `max-k` is never reached. Only a real reranker over a real
+corpus — 5,183 SciFact documents, bge-reranker-v2-m3 — produced the flat, tied distributions
+that push the quantile past the cap on a fifth of queries.
+
+That is worth stating plainly because the mock run is otherwise excellent evidence: it is
+seeded, it reproduces exactly, and it validates the mechanism. What it cannot validate is a
+threshold interacting with the shape of real scores. A stand-in reranker tests the code; it
+does not test the calibration against the distribution the code will meet.
+
 ### Two other things the run recorded
 
 **The abstention certificate holds but is not usable as calibrated.** Risk came out 0.0%

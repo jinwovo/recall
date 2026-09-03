@@ -14,7 +14,7 @@ repo's own README first, and three of its headline claims failed.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/anytime-dark.png">
-  <img src="docs/anytime-light.png" alt="Left: a fixed-N 95% confidence interval, checked after every query, misses the true score in 17% of runs at 50 queries and 33% at 300, against 0.5-1.7% for an anytime-valid confidence sequence. Right: a sequential gate spends 30 of its 300-query budget on a clearly broken system and 55 on a clearly good one, but the full budget on one sitting exactly at the threshold.">
+  <img src="docs/anytime-light.png" alt="Left: a fixed-N 95% confidence interval, checked after every query, misses the true score in 17% of runs at 50 queries and 33% at 300, against 0.2-2.6% for an anytime-valid confidence sequence. Right: a sequential gate spends 30 of its 300-query budget on a clearly broken system and 55 on a clearly good one, but the full budget on one sitting exactly at the threshold.">
 </picture>
 
 ---
