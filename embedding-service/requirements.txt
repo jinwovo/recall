@@ -2,4 +2,7 @@ fastapi==0.115.6
 uvicorn[standard]==0.34.0
 pydantic==2.10.4
 FlagEmbedding==1.3.4
-# FlagEmbedding pulls torch + transformers. For GPU, install a CUDA torch build instead.
+# FlagEmbedding pulls torch + transformers. torch is installed ahead of this file in the
+# Dockerfile, from the CPU wheel index: resolved from here it would come as the CUDA
+# build, and this service runs on CPU (compose reserves no GPU). See the Dockerfile's
+# TORCH_INDEX_URL build arg to switch.
