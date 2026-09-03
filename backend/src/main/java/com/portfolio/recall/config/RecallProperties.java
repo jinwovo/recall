@@ -59,7 +59,21 @@ public record RecallProperties(
     }
 
     /** RAG answer-quality guardrails (docs/adr/0004, 0009, 0013). */
-    public record Rag(Judge judge, Sufficiency sufficiency, Conformal conformal) {
+    public record Rag(Judge judge, Sufficiency sufficiency, Conformal conformal,
+                      Generation generation) {
+
+        /**
+         * Bounds on the PRIMARY generation stream — the one path here that is not fail-open,
+         * because there is no answer to fall back to.
+         *
+         * <p>Both are gaps between tokens, not deadlines on the whole answer: a long answer
+         * that keeps arriving is healthy, and a provider that has stopped sending is not,
+         * however short the response was. {@code firstTokenTimeoutSeconds} is separate
+         * because prefill is the slow part — a local CPU model can take a minute to emit
+         * anything and then stream steadily, so one timeout tuned for that would leave a
+         * mid-answer stall running for a minute too.
+         */
+        public record Generation(int firstTokenTimeoutSeconds, int stallTimeoutSeconds) {}
         /** Post-hoc groundedness judge: fail-open, bounded by timeoutSeconds. */
         public record Judge(boolean enabled, int timeoutSeconds) {}
 

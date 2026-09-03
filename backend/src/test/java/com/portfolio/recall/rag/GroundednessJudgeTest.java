@@ -69,7 +69,8 @@ class GroundednessJudgeTest {
         RecallProperties props = new RecallProperties(null, null, null, null, null, null, null,
                 new RecallProperties.Rag(new RecallProperties.Rag.Judge(enabled, 5),
                         new RecallProperties.Rag.Sufficiency(false, 0.35, 5),
-                        new RecallProperties.Rag.Conformal(false, 0.10, -1.0, 1.0, 12, false, 0.05, 0)), null);
+                        new RecallProperties.Rag.Conformal(false, 0.10, -1.0, 1.0, 12, false, 0.05, 0),
+                        new RecallProperties.Rag.Generation(120, 30)), null);
         return new GroundednessJudge(llm, meters, props);
     }
 }

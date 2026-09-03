@@ -2,12 +2,14 @@ package com.portfolio.recall.rag;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.portfolio.recall.cache.SemanticCacheService;
+import com.portfolio.recall.config.RecallProperties;
 import com.portfolio.recall.embedding.EmbeddingClient;
 import com.portfolio.recall.llm.LlmClient;
 import com.portfolio.recall.llm.ModelTier;
 import com.portfolio.recall.persistence.QueryLogService;
 import com.portfolio.recall.search.RetrievedChunk;
 import com.portfolio.recall.search.SearchService;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.http.codec.ServerSentEvent;
@@ -47,11 +49,13 @@ public class RagService {
     private final CoverageMonitor coverage;
     private final QueryLogService queryLog;
     private final ObjectMapper json;
+    private final Duration firstTokenTimeout;
+    private final Duration stallTimeout;
 
     public RagService(SearchService search, EmbeddingClient embeddings, SemanticCacheService cache,
                       LlmClient llm, GroundednessJudge judge, SufficiencyCheck sufficiency,
                       ConformalSetSizer contextSizer, CoverageMonitor coverage,
-                      QueryLogService queryLog, ObjectMapper json) {
+                      QueryLogService queryLog, ObjectMapper json, RecallProperties props) {
         this.search = search;
         this.embeddings = embeddings;
         this.cache = cache;
@@ -62,6 +66,10 @@ public class RagService {
         this.coverage = coverage;
         this.queryLog = queryLog;
         this.json = json;
+        this.firstTokenTimeout =
+                Duration.ofSeconds(props.rag().generation().firstTokenTimeoutSeconds());
+        this.stallTimeout =
+                Duration.ofSeconds(props.rag().generation().stallTimeoutSeconds());
     }
 
     public Flux<ServerSentEvent<String>> ask(String query) {
@@ -120,6 +128,15 @@ public class RagService {
                 Flux<ServerSentEvent<String>> sources = Flux.just(sse("sources", toJson(chunks)));
                 Flux<ServerSentEvent<String>> tokens = llm
                         .streamAnswer(SYSTEM_PROMPT, prompt, ModelTier.PRIMARY)
+                        // The only path here without a fallback, so it is the only one that
+                        // must not fail open: bound the gap between tokens rather than the
+                        // answer. A provider that stops sending would otherwise hold the SSE
+                        // connection for as long as it hangs, and the tail below — judge,
+                        // cache, query log — never runs, because the stream never completes.
+                        // First token is separate: prefill is the slow part, and one timeout
+                        // sized for a local CPU model would let a mid-answer stall run just
+                        // as long.
+                        .timeout(Mono.delay(firstTokenTimeout), t -> Mono.delay(stallTimeout))
                         .doOnNext(answer::append)
                         .map(t -> sse("token", toJson(t)));
                 // TODO: switch [n] citations → Claude native citations (claude provider + paid key).

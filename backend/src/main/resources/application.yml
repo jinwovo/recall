@@ -94,6 +94,13 @@ recall:
       enabled: ${RAG_SUFFICIENCY_ENABLED:true}
       confidence-threshold: ${RAG_SUFFICIENCY_CONFIDENCE_THRESHOLD:0.35}   # skip check above this rerank score
       timeout-seconds: ${RAG_SUFFICIENCY_TIMEOUT_SECONDS:45}   # CPU 3B prefill needs headroom; fail-open past this
+    generation:                # bounds on the PRIMARY answer stream - the one path with no fallback
+      # Gaps between tokens, not deadlines on the answer. A long answer that keeps arriving
+      # is healthy; a provider that stopped sending is not, however short its output was.
+      # Without these an SSE connection stays open for as long as the provider hangs, and
+      # the judge/cache tail never runs because the stream never completes.
+      first-token-timeout-seconds: ${RAG_GENERATION_FIRST_TOKEN_TIMEOUT_SECONDS:120}  # prefill; a local CPU model is slow here
+      stall-timeout-seconds: ${RAG_GENERATION_STALL_TIMEOUT_SECONDS:30}               # once streaming, gaps are short
     conformal:                 # adaptive context sizing with a coverage guarantee (docs/adr/0013)
       # Off until calibrated: `make calibrate` runs eval/calibrate.py against a real eval
       # result and prints the threshold to paste here. A threshold is only valid for the
