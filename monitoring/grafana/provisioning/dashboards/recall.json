@@ -1,19 +1,37 @@
 {
   "uid": "recall-overview",
   "title": "Recall — Overview",
-  "tags": ["recall"],
+  "tags": [
+    "recall"
+  ],
   "schemaVersion": 39,
   "version": 1,
-  "time": { "from": "now-1h", "to": "now" },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
   "refresh": "10s",
   "panels": [
     {
       "id": 1,
       "type": "timeseries",
       "title": "LLM tokens/sec by model & type",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
-      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
@@ -26,9 +44,22 @@
       "id": 2,
       "type": "timeseries",
       "title": "Semantic cache hits/sec",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
-      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
@@ -41,9 +72,22 @@
       "id": 3,
       "type": "timeseries",
       "title": "Retrieval latency p95 by mode",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
-      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
@@ -56,9 +100,22 @@
       "id": 4,
       "type": "timeseries",
       "title": "Ingestion throughput (docs & chunks/sec)",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
-      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
@@ -76,9 +133,22 @@
       "id": 5,
       "type": "timeseries",
       "title": "HTTP p95 latency",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
-      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 16
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
@@ -91,9 +161,22 @@
       "id": 6,
       "type": "timeseries",
       "title": "Groundedness verdicts/sec (LLM judge)",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
-      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
@@ -106,9 +189,24 @@
       "id": 7,
       "type": "stat",
       "title": "Groundedness (avg judge score, 1h)",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
-      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 }, "overrides": [] },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
@@ -121,9 +219,22 @@
       "id": 8,
       "type": "timeseries",
       "title": "Ingestion reliability (retries / DLQ / replays / raw-archive failures)",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 },
-      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 32
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
@@ -149,6 +260,139 @@
           "refId": "E",
           "expr": "rate(recall_ingestion_dlq_replayed_total[5m])",
           "legendFormat": "replayed"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Conformal certificate: is max-k voiding it?",
+      "description": "The conformal quantile picks a set size per query; recall.rag.conformal.max-k then caps it. A capped set can drop the passage the quantile included, so measured coverage falls below alpha while nothing errors. Measured on SciFact, max-k=12 truncated 21% of calibration sets and held-out coverage came out 80.6% against a 90% promise (docs/adr/0013). If the top line is a meaningful share of the bottom one, the cap is the real promise, not alpha.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 40
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(recall_rag_context_capped_total[5m])",
+          "legendFormat": "sets truncated/sec"
+        },
+        {
+          "refId": "B",
+          "expr": "rate(recall_rag_context_passages_count[5m])",
+          "legendFormat": "sets sized/sec"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Context size actually sent (passages/query)",
+      "description": "What adaptive sizing is buying. Mean K well under max-k means the cap is only shaping the tail; mean K pinned at max-k means it is shaping everything.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 40
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(recall_rag_context_passages_sum[5m]) / rate(recall_rag_context_passages_count[5m])",
+          "legendFormat": "mean K"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Coverage monitor (ADR 0016)",
+      "description": "A threshold calibrated once stays valid only while traffic matches the distribution it was fitted on, and that failure is silent. This is the anytime-valid sequence that makes it loud. alarming going to 1 means the promised coverage has been ruled out, not merely missed once.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 48
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "recall_rag_coverage_miscoverage",
+          "legendFormat": "miscoverage rate"
+        },
+        {
+          "refId": "B",
+          "expr": "recall_rag_coverage_alarming",
+          "legendFormat": "alarming (1 = fired)"
+        },
+        {
+          "refId": "C",
+          "expr": "recall_rag_coverage_overcovering",
+          "legendFormat": "overcovering (1 = true)"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Abstention and cache pressure",
+      "description": "Abstentions are the price of the risk guarantee, so they are a number to watch rather than a fault. Cache rejections mean recall.semantic-cache.max-entries is reached: past it every lookup still scans the whole hash and new answers are refused rather than evicted.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 48
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (verdict) (rate(recall_rag_sufficiency_verdicts_total[5m]))",
+          "legendFormat": "sufficiency {{verdict}}"
+        },
+        {
+          "refId": "B",
+          "expr": "rate(recall_rag_sufficiency_skips_total[5m])",
+          "legendFormat": "sufficiency skipped (fail-open)"
+        },
+        {
+          "refId": "C",
+          "expr": "rate(recall_semantic_cache_rejected_total[5m])",
+          "legendFormat": "cache full, answer refused"
         }
       ]
     }
