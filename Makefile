@@ -58,5 +58,5 @@ beir-eval:     ## ingest a fetched BEIR benchmark and evaluate on it (needs the 
 calibrate:     ## certify the context size and abstention threshold (docs/adr/0013)
 	cd eval && python calibrate.py $(or $(GOLD),gold.jsonl) --json ../calibration.json
 
-loadtest:      ## run the k6 search load test
-	k6 run load-test/search.js
+loadtest:      ## k6 search load test; MODE=bm25|vector|hybrid|hyde (default bm25)
+	k6 run -e MODE=$(or $(MODE),bm25) load-test/search.js
