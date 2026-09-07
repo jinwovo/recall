@@ -8,7 +8,13 @@ Claude Desktop / Claude Code / any MCP client can search and question YOUR docum
                                                       + groundedness verdict
 
 Run (stdio):
-    RECALL_API=http://localhost:18080 python server.py
+    python server.py                                       # backend on the default 8080
+    RECALL_API=http://localhost:18080 python server.py     # backend published on 18080
+
+Point RECALL_API at wherever the backend actually is. Two different settings decide that and
+they are easy to confuse: `BACKEND_PORT` maps a host port onto the container when the backend
+runs in compose (the .env here sets 18080), while a backend run on the host with `gradlew
+bootRun` takes `SERVER_PORT` and otherwise listens on 8080.
 
 Requires the Recall stack up (docker compose --profile full up) and `pip install fastmcp`.
 """

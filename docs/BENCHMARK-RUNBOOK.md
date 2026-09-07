@@ -113,13 +113,20 @@ make beir                                    # SciFact: 5,183 docs, 300 queries,
 # 2. Infrastructure in compose, backend on the host.
 docker compose -f docker-compose.yml -f docker-compose.hostdev.yml up -d \
     elasticsearch redis postgres kafka minio embedding-service
-cd backend && REDIS_PORT=6383 POSTGRES_PORT=5437 KAFKA_CONSUMER_CONCURRENCY=3 ./gradlew bootRun
+cd backend && SERVER_PORT=18080 REDIS_PORT=6383 POSTGRES_PORT=5437 KAFKA_CONSUMER_CONCURRENCY=3 ./gradlew bootRun
 
 # 3. Index. Hours. Watch the *committed offset*, not the log:
 python scripts/seed_corpus.py eval/beir-scifact/corpus.jsonl --timeout 36000
 docker exec recall-kafka /opt/kafka/bin/kafka-consumer-groups.sh \
     --bootstrap-server localhost:9092 --describe --group recall-ingestion
 ```
+
+`SERVER_PORT` is load-bearing here, and it is **not** `BACKEND_PORT`. That one only maps a
+host port onto the container in `docker-compose.yml`; a backend started the way this step
+starts it reads `SERVER_PORT` from `application.yml` and otherwise listens on 8080. Every
+admin call in step 4 and every `RECALL_API` below is written against 18080, so leaving it
+out gets you a stack that comes up perfectly and a step 4 that fails with a connection
+refused — which reads like a broken endpoint rather than a port that was never set.
 
 On Windows Git Bash, prefix every `docker exec` with `MSYS_NO_PATHCONV=1`. MSYS rewrites the
 *container's* absolute path into a host path and the call fails with

@@ -125,7 +125,11 @@ services:
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
       MINIO_BUCKET: recall-raw
-    ports: ["${BACKEND_PORT:-8080}:8080"]   # set BACKEND_PORT (e.g. 18080) if host 8080 is taken
+    # Set BACKEND_PORT (e.g. 18080) if host 8080 is taken. It only publishes this container
+    # — a backend run on the host with `gradlew bootRun`, which is the documented dev loop,
+    # ignores it entirely and takes SERVER_PORT from application.yml (default 8080). Two
+    # variables, one port, and getting them mixed up looks like a broken endpoint.
+    ports: ["${BACKEND_PORT:-8080}:8080"]
     depends_on:
       elasticsearch: { condition: service_healthy }
       redis: { condition: service_healthy }
