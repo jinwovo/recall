@@ -130,8 +130,23 @@ export default function Home() {
       setStreaming(false);
       es.close();
     });
-    es.addEventListener("error", () => {
-      if (!sawToken) setError("Stream failed — is the backend up?");
+    // Two different things land here. The server sends `event: error` with a message — the
+    // generation stream timing out on a stalled provider is the common one, and it arrives
+    // *after* tokens. EventSource also fires a bare error on a transport failure, with no
+    // data. Neither may be swallowed once tokens are on screen: the stage goes to "done"
+    // and the spinner stops either way, so a truncated answer would otherwise read as a
+    // finished one.
+    es.addEventListener("error", (e) => {
+      const detail = (e as MessageEvent).data;
+      if (detail) {
+        setError(sawToken
+          ? `Answer cut short — ${detail}`
+          : `Request failed — ${detail}`);
+      } else {
+        setError(sawToken
+          ? "Connection dropped mid-answer — what is shown above is incomplete."
+          : "Stream failed — is the backend up?");
+      }
       setStage("done");
       setStreaming(false);
       es.close();
