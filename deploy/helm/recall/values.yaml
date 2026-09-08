@@ -18,9 +18,27 @@ embedding:
     pullPolicy: IfNotPresent
   replicaCount: 1
   port: 8000
+  # Sized from measurement, not from a guess. bge-m3 and bge-reranker-v2-m3 resident
+  # together were observed at 3.7Gi idle and 5.6Gi while indexing and evaluating a
+  # 5,183-document corpus; the previous 4Gi limit was under the working set and would be
+  # OOMKilled by the first real load. CPU was 200-500% across the same window, so a 2-core
+  # limit throttles exactly the stage that dominates every query.
   resources:
-    requests: { cpu: 500m, memory: 2Gi }
-    limits: { cpu: "2", memory: 4Gi }
+    requests: { cpu: "2", memory: 4Gi }
+    limits: { cpu: "4", memory: 8Gi }
+  # uvicorn only binds once the lifespan hook holds both models, so /health is a real
+  # readiness signal — and a slow one. With the cache below populated it answers in ~15s;
+  # without it, the pod downloads ~6GB of weights first and took 510s to come up. The
+  # startup probe has to cover the cold path or the liveness probe kills the pod mid
+  # download and the deployment never converges. 60 x 10s matches what compose allows.
+  startupFailureThreshold: 60
+  # Model weights, so a restart does not re-download 6GB. Off by default because it needs a
+  # StorageClass; leaving it off is supported, and costs the cold start above every restart.
+  persistence:
+    enabled: false
+    size: 12Gi
+    storageClass: ""
+    accessMode: ReadWriteOnce
 
 # External backing services — provide your own (managed or via subcharts).
 config:

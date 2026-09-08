@@ -23,20 +23,57 @@ spec:
           imagePullPolicy: {{ .Values.embedding.image.pullPolicy }}
           ports:
             - containerPort: {{ .Values.embedding.port }}
+          # Startup is the slow phase and it needs its own probe: the liveness probe is not
+          # evaluated until this one succeeds, so a cold start that spends minutes fetching
+          # model weights is no longer a restart loop.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.embedding.port }}
+            periodSeconds: 10
+            failureThreshold: {{ .Values.embedding.startupFailureThreshold }}
           readinessProbe:
             httpGet:
               path: /health
               port: {{ .Values.embedding.port }}
-            initialDelaySeconds: 30
             periodSeconds: 10
           livenessProbe:
             httpGet:
               path: /health
               port: {{ .Values.embedding.port }}
-            initialDelaySeconds: 60
             periodSeconds: 20
           resources:
             {{- toYaml .Values.embedding.resources | nindent 12 }}
+          {{- if .Values.embedding.persistence.enabled }}
+          volumeMounts:
+            - name: hf-cache
+              mountPath: /root/.cache/huggingface
+          {{- end }}
+      {{- if .Values.embedding.persistence.enabled }}
+      volumes:
+        - name: hf-cache
+          persistentVolumeClaim:
+            claimName: {{ include "recall.fullname" . }}-hf-cache
+      {{- end }}
+{{- if .Values.embedding.persistence.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "recall.fullname" . }}-hf-cache
+  labels:
+    {{- include "recall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: embedding
+spec:
+  accessModes:
+    - {{ .Values.embedding.persistence.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.embedding.persistence.size }}
+  {{- with .Values.embedding.persistence.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+{{- end }}
 ---
 apiVersion: v1
 kind: Service
