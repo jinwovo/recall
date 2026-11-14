@@ -6,8 +6,11 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -44,7 +47,10 @@ class RagServiceFinishReasonTest {
     private final LlmClient llm = mock(LlmClient.class);
     /** Disabled unless a test enables it — Mockito answers enabled() with false. */
     private final ClaimVerifier claimVerifier = mock(ClaimVerifier.class);
+    private final FactualityMonitor factualityMonitor = mock(FactualityMonitor.class);
     private final SemanticCacheService cache = mock(SemanticCacheService.class);
+    /** Off unless a test turns it on. */
+    private final GroundednessJudge judge = mock(GroundednessJudge.class);
     private final SimpleMeterRegistry meters = new SimpleMeterRegistry();
 
     private RagService service() {
@@ -53,7 +59,6 @@ class RagServiceFinishReasonTest {
         SufficiencyCheck sufficiency = mock(SufficiencyCheck.class);
         ConformalSetSizer sizer = mock(ConformalSetSizer.class);
         QueryLogService queryLog = mock(QueryLogService.class);
-        GroundednessJudge judge = mock(GroundednessJudge.class);
 
         when(embeddings.embedOne(anyString())).thenReturn(Mono.just(new float[] {1f, 0f}));
         when(cache.lookup(any())).thenReturn(Mono.just(Optional.empty()));
@@ -61,7 +66,6 @@ class RagServiceFinishReasonTest {
         when(search.hybridWithVector(anyString(), any())).thenReturn(Mono.just(List.of(CHUNK)));
         when(sufficiency.allowGeneration(anyString(), any())).thenReturn(Mono.just(true));
         when(sizer.size(any())).thenReturn(1);
-        when(judge.enabled()).thenReturn(false);
         when(queryLog.record(anyString(), anyString(), anyBoolean(), anyInt(), anyInt(),
                 anyLong(), any())).thenReturn(Mono.empty());
 
@@ -76,7 +80,7 @@ class RagServiceFinishReasonTest {
                 null);
 
         return new RagService(search, embeddings, cache, llm, judge, sufficiency, sizer,
-                mock(CoverageMonitor.class), claimVerifier, queryLog, new ObjectMapper(), meters, props);
+                mock(CoverageMonitor.class), claimVerifier, factualityMonitor, queryLog, new ObjectMapper(), meters, props);
     }
 
     private void provider(FinishReason reason) {
@@ -147,6 +151,65 @@ class RagServiceFinishReasonTest {
                 .containsSubsequence("finish", "judging", "claims", "done");
         assertThat(dataOf(events, "claims")).contains("\"kept\":false").contains("\"certified\":true");
         verify(cache, never()).put(any(), anyString(), anyString());
+    }
+
+    @Test
+    void theFactualityMonitorIsFedTheVerdictOnWhatTheReaderWasLeftWith() {
+        // "The answer is forty" — the filter withholds " forty" (offsets 13-19). The monitor
+        // must see the judge's verdict on "The answer is", not on the full answer: judging
+        // the full text would count the claim the filter correctly removed against it.
+        provider(FinishReason.COMPLETE);
+        when(judge.enabled()).thenReturn(true);
+        when(judge.judge(anyString(), any(), anyString()))
+                .thenReturn(Mono.just(Optional.of(Judgment.Verdict.PARTIAL.toJudgment())));
+        when(judge.judge(anyString(), any(), eq("The answer is")))
+                .thenReturn(Mono.just(Optional.of(Judgment.Verdict.SUPPORTED.toJudgment())));
+        when(factualityMonitor.enabled()).thenReturn(true);
+        when(claimVerifier.enabled()).thenReturn(true);
+        when(claimVerifier.verify(any(), anyString())).thenReturn(Mono.just(Optional.of(
+                new ClaimReport(0.10, 0.5, true, List.of(
+                        new ClaimReport.Claim(0, 13, 0.9, true),
+                        new ClaimReport.Claim(13, 19, 0.2, false))))));
+
+        drain();
+
+        verify(judge, timeout(2000)).judge(anyString(), any(), eq("The answer is"));
+        verify(factualityMonitor, timeout(2000)).observe(Judgment.Verdict.SUPPORTED.toJudgment());
+        verify(factualityMonitor, never()).observe(Judgment.Verdict.PARTIAL.toJudgment());
+    }
+
+    @Test
+    void withNothingWithheldTheOrdinaryVerdictIsReusedNotPaidForTwice() {
+        provider(FinishReason.COMPLETE);
+        when(judge.enabled()).thenReturn(true);
+        when(judge.judge(anyString(), any(), anyString()))
+                .thenReturn(Mono.just(Optional.of(Judgment.Verdict.SUPPORTED.toJudgment())));
+        when(factualityMonitor.enabled()).thenReturn(true);
+        when(claimVerifier.enabled()).thenReturn(true);
+        when(claimVerifier.verify(any(), anyString())).thenReturn(Mono.just(Optional.of(
+                new ClaimReport(0.10, 0.5, true, List.of(new ClaimReport.Claim(0, 19, 0.9, true))))));
+
+        drain();
+
+        verify(judge, times(1)).judge(anyString(), any(), anyString());
+        verify(factualityMonitor).observe(Judgment.Verdict.SUPPORTED.toJudgment());
+    }
+
+    @Test
+    void anUncertifiedReportIsNotAnObservation() {
+        // Unscored claims void the certificate; the monitor defends only what was promised.
+        provider(FinishReason.COMPLETE);
+        when(judge.enabled()).thenReturn(true);
+        when(judge.judge(anyString(), any(), anyString()))
+                .thenReturn(Mono.just(Optional.of(Judgment.Verdict.UNSUPPORTED.toJudgment())));
+        when(factualityMonitor.enabled()).thenReturn(true);
+        when(claimVerifier.enabled()).thenReturn(true);
+        when(claimVerifier.verify(any(), anyString())).thenReturn(Mono.just(Optional.of(
+                new ClaimReport(0.10, 0.5, false, List.of(new ClaimReport.Claim(0, 19, null, true))))));
+
+        drain();
+
+        verify(factualityMonitor, never()).observe(any());
     }
 
     @Test

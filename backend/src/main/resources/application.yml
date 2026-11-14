@@ -113,6 +113,11 @@ recall:
       threshold: ${RAG_FACTUALITY_THRESHOLD:-1}
       max-claims: ${RAG_FACTUALITY_MAX_CLAIMS:12}        # one rerank call per claim; the rest go unscored
       timeout-seconds: ${RAG_FACTUALITY_TIMEOUT_SECONDS:20}  # fail-open: past this the answer is shown unfiltered
+      # Is the certificate still true? Once calibrated, the judge grades the text the reader
+      # was left with, and an anytime-valid alarm fires when the evidence rules alpha out
+      # (same machinery as the coverage monitor, docs/adr/0016). Needs the judge enabled.
+      monitor-alpha: ${RAG_FACTUALITY_MONITOR_ALPHA:0.05}
+      monitor-warmup: ${RAG_FACTUALITY_MONITOR_WARMUP:50}
     conformal:                 # adaptive context sizing with a coverage guarantee (docs/adr/0013)
       # Off until calibrated: `make calibrate` runs eval/calibrate.py against a real eval
       # result and prints the threshold to paste here. A threshold is only valid for the

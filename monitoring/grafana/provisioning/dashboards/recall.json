@@ -431,7 +431,7 @@
       "id": 14,
       "type": "timeseries",
       "title": "Claim-level factuality (ADR 0017)",
-      "description": "Claims per second by outcome. 'withheld' scored at or below the certified threshold and were struck from the answer; 'unscored' fell past recall.rag.factuality.max-claims and void the certificate for their answer; 'skipped' answers timed out and were shown unfiltered (fail-open). A rising withheld share at a fixed threshold is drift, not a better filter: the certificate is exchangeability-conditional (ADR 0016).",
+      "description": "Claims per second by outcome. 'withheld' scored at or below the certified threshold and were struck from the answer; 'unscored' fell past recall.rag.factuality.max-claims and void the certificate for their answer; 'skipped' answers timed out and were shown unfiltered (fail-open). A rising withheld share at a fixed threshold is drift, not a better filter: the certificate is exchangeability-conditional (ADR 0016). The miss rate is the judge's verdict on the text certified answers were left with; the alarm latches when an anytime-valid interval rules the promised alpha out.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -458,6 +458,16 @@
           "refId": "B",
           "expr": "rate(recall_rag_claims_skipped_total[5m])",
           "legendFormat": "answers skipped (fail-open)"
+        },
+        {
+          "refId": "C",
+          "expr": "recall_rag_factuality_miss_rate",
+          "legendFormat": "certificate miss rate (judge)"
+        },
+        {
+          "refId": "D",
+          "expr": "recall_rag_factuality_alarming",
+          "legendFormat": "certificate alarm (latched)"
         }
       ]
     }

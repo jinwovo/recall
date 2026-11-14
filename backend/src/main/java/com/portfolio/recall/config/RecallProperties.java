@@ -69,10 +69,15 @@ public record RecallProperties(
          * certificate printed by {@code python eval/factuality.py} for this {@code alpha};
          * -1 means uncalibrated: claims are still scored and reported, nothing is withheld,
          * which is how the labelled calibration set gets collected.
+         *
+         * <p>{@code monitorAlpha}/{@code monitorWarmup} configure the anytime-valid alarm on
+         * the certificate (FactualityMonitor), as their Conformal namesakes do for coverage.
          */
         public record Factuality(boolean enabled, double alpha, double threshold,
-                                 int maxClaims, int timeoutSeconds) {
-            public static final Factuality DISABLED = new Factuality(false, 0.10, -1.0, 12, 10);
+                                 int maxClaims, int timeoutSeconds,
+                                 double monitorAlpha, int monitorWarmup) {
+            public static final Factuality DISABLED =
+                    new Factuality(false, 0.10, -1.0, 12, 10, 0.05, 50);
 
             public boolean calibrated() {
                 return threshold >= 0.0;

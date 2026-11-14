@@ -113,9 +113,35 @@ for the slower of the two, not their sum):
 - **Cache**: an answer with a withheld claim is not cached — the cache stores the text, and
   replaying it would replay the claim the filter removed.
 - **Observe mode** (`threshold: -1`): scored and reported, nothing withheld. This is how the
-  calibration set is collected: record the `claims` events, label each claim, and run
-  `python eval/factuality.py labels.jsonl --alpha 0.10`, which prints the certificate and
-  the YAML to paste, and exits non-zero when the certificate is uncertified or vacuous.
+  calibration set is collected, in three commands:
+  1. `make collect-claims` runs the questions through `/api/ask` and writes each answer's
+     claims — text, score, `"supported": null` — to `eval/claims-to-label.jsonl`. Cache hits,
+     abstentions, answers with unscored claims and answers served under an *active* filter
+     are skipped and counted: none of them is the population the threshold will filter.
+  2. A person sets every `null` to `true` or `false`.
+  3. `make certify-claims` prints the certificate and the YAML to paste, and exits non-zero
+     when it is uncertified or vacuous. A claim still `null` is refused, not read as
+     `false` — `bool(None)` would have silently pushed the threshold up.
+
+### The certificate expires too
+
+`FactualityMonitor` gives the claim certificate the alarm ADR 0016 gave the coverage one,
+on the same anytime-valid machinery — now one class, `AnytimeRateMonitor`, shared by both
+monitors, with the Python golden vectors still pinning it. Two choices are specific to
+claims:
+
+- **What is judged is what the reader was left with.** Judging the full answer would count
+  the claims the filter correctly removed as failures of the filter. With nothing withheld
+  the ordinary verdict is reused at no cost; otherwise the remaining text is judged once
+  more, detached from the response, since nobody is waiting on a number only the alarm
+  reads. With every claim withheld nothing is left to be wrong — the calibration counts
+  that as factual, and so does the monitor.
+- **`PARTIAL` is a miss.** The coverage monitor lets it pass; this promise is about *every*
+  remaining claim, and "partially supported" says one of them is not.
+
+Only certified answers are observed — an answer with unscored claims was never promised
+anything. In the distractor regime from the simulation (~48% misses against a 10%
+promise) the alarm latches within 60 answers; at 8% it stays quiet over 2,000.
 
 Checked in a browser against a stub stream: the withheld sentence renders struck through at
 exactly its offsets, citations inside and around it stay clickable, and the badge reads
@@ -127,5 +153,6 @@ exactly its offsets, citations inside and around it stay clickable, and the badg
 - No threshold ships, because the labelled set of decomposed answers does not exist yet.
   The judge-label format of ADR 0015 extends naturally — one row per claim instead of per
   answer — and PPI is how a small human-labelled set and a large judge-labelled one combine.
-- One more threshold to keep exchangeable. It belongs on the ADR 0016 monitor, with the
-  judge's per-claim verdicts as the online signal.
+- One more threshold to keep exchangeable, and now one more alarm watching it. Its signal is
+  the judge's, so the ADR 0015 caveat carries over: a drift in the judge is
+  indistinguishable here from a drift in the claims.

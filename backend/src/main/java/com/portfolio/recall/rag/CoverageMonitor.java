@@ -2,7 +2,6 @@ package com.portfolio.recall.rag;
 
 import com.portfolio.recall.config.RecallProperties;
 import io.micrometer.core.instrument.MeterRegistry;
-import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -94,29 +93,14 @@ public class CoverageMonitor {
 
     private static final Logger log = LoggerFactory.getLogger(CoverageMonitor.class);
 
-    /** Kept identical to {@code eval/sequential.py}; {@code CoverageMonitorTest} pins them. */
-    private static final double BET_FRACTION = 0.5;
-    private static final double HEDGE = 0.5;
-    private static final int GRID = 200;
-
     private final boolean enabled;
     private final double alpha;                 // the coverage level being defended
-    private final double testAlpha;             // the confidence sequence's own error budget
-    private final int warmup;
     private final MeterRegistry meters;
-
-    private final double[] points = new double[GRID];
-    private final CapitalProcess[] books = new CapitalProcess[GRID];
-    private final AtomicBoolean alarming = new AtomicBoolean(false);
-
-    private long observed;
-    private long misses;
+    private final AnytimeRateMonitor rate;
 
     public CoverageMonitor(RecallProperties props, MeterRegistry meters) {
         RecallProperties.Rag.Conformal conformal = props.rag().conformal();
         this.alpha = conformal.alpha();
-        this.testAlpha = conformal.monitorAlpha() > 0 ? conformal.monitorAlpha() : 0.05;
-        this.warmup = Math.max(0, conformal.monitorWarmup());
         this.meters = meters;
         // Monitoring a certificate that was never issued is noise, and an alpha outside
         // (0, 1) is an unconfigured one rather than a lenient one.
@@ -126,14 +110,11 @@ public class CoverageMonitor {
             log.info("Coverage monitoring off: sizing enabled={}, alpha={}.",
                     conformal.enabled(), alpha);
         }
-        for (int j = 0; j < GRID; j++) {
-            // Cell midpoints, so 0 and 1 are never hypothesised and the stake bounds stay
-            // finite. Same construction as the Python ConfidenceSequence.
-            points[j] = (j + 0.5) / GRID;
-            books[j] = new CapitalProcess(points[j], testAlpha);
-        }
+        this.rate = new AnytimeRateMonitor(alpha,
+                conformal.monitorAlpha() > 0 ? conformal.monitorAlpha() : 0.05,
+                conformal.monitorWarmup());
         meters.gauge("recall.rag.coverage.miscoverage", this, CoverageMonitor::miscoverage);
-        meters.gauge("recall.rag.coverage.alarming", this, m -> m.alarming.get() ? 1.0 : 0.0);
+        meters.gauge("recall.rag.coverage.alarming", this, m -> m.alarming() ? 1.0 : 0.0);
         meters.gauge("recall.rag.coverage.overcovering", this, m -> m.overCovering() ? 1.0 : 0.0);
     }
 
@@ -145,29 +126,12 @@ public class CoverageMonitor {
      * Record one judged answer. {@code UNSUPPORTED} counts as a miss; {@code PARTIAL} does
      * not, because the passages did carry something the answer stood on and calling that a
      * coverage failure would inflate the rate the certificate is being held to.
-     *
-     * <p>Synchronized: the capital processes are mutable state shared across request
-     * threads, and the martingale argument requires each stake to be a function of the
-     * observations that preceded it. Interleaved updates would break that, and the cost is
-     * a few hundred multiplications under a lock, next to an LLM round trip.
      */
-    public synchronized void observe(Judgment judgment) {
+    public void observe(Judgment judgment) {
         if (!enabled || judgment == null) {
             return;
         }
-        double miss = judgment.verdict() == Judgment.Verdict.UNSUPPORTED ? 1.0 : 0.0;
-        observed++;
-        misses += (long) miss;
-        for (CapitalProcess book : books) {
-            book.update(miss);
-        }
-        if (observed < warmup) {
-            return;
-        }
-        boolean breached = lower() > alpha;
-        if (breached && alarming.compareAndSet(false, true)) {
-            // Latched: the sequence is valid at every sample size, so once alpha is ruled
-            // out the evidence does not stop existing because a later query went well.
+        if (rate.observe(judgment.verdict() == Judgment.Verdict.UNSUPPORTED)) {
             meters.counter("recall.rag.coverage.alarm").increment();
             log.warn("Coverage certificate breached: measured miscoverage is above what it "
                             + "promises, and the evidence has ruled the promise out. "
@@ -176,7 +140,7 @@ public class CoverageMonitor {
                             + "calibrated on a distribution the traffic no longer matches — "
                             + "re-run eval/calibrate.py. Note this is the judge's view of "
                             + "coverage (docs/adr/0015), not ground truth.",
-                    fmt(alpha), fmt(miscoverage()), observed, fmt(lower()), fmt(upper()));
+                    fmt(alpha), fmt(miscoverage()), observedCount(), fmt(lower()), fmt(upper()));
         }
     }
 
@@ -188,7 +152,7 @@ public class CoverageMonitor {
      * Clearing it is a deploy-time decision — recalibrate, then restart — not a runtime one.
      */
     public boolean alarming() {
-        return alarming.get();
+        return rate.alarming();
     }
 
     /**
@@ -196,116 +160,35 @@ public class CoverageMonitor {
      * kept with room to spare, which means context sets larger than it requires. Reported,
      * never alarmed on — this is a cost signal, not a correctness one.
      */
-    public synchronized boolean overCovering() {
-        return observed >= warmup && observed > 0 && upper() < alpha;
+    public boolean overCovering() {
+        return rate.overCovering();
     }
 
     public long observedCount() {
-        return observed;
+        return rate.observedCount();
     }
 
     /** Realised miscoverage over judged answers, or 0 before any arrive. */
     public double miscoverage() {
-        return observed == 0 ? 0.0 : (double) misses / observed;
+        return rate.rate();
     }
 
     /** Lower end of the anytime-valid interval on the miscoverage rate. */
-    public synchronized double lower() {
-        double lo = Double.NaN;
-        for (int j = 0; j < GRID; j++) {
-            if (!books[j].rejected()) {
-                lo = points[j];
-                break;
-            }
-        }
-        return Double.isNaN(lo) ? 0.0 : lo;     // every hypothesis rejected — widen out
+    public double lower() {
+        return rate.lower();
     }
 
     /** Upper end of the anytime-valid interval on the miscoverage rate. */
-    public synchronized double upper() {
-        double hi = Double.NaN;
-        for (int j = GRID - 1; j >= 0; j--) {
-            if (!books[j].rejected()) {
-                hi = points[j];
-                break;
-            }
-        }
-        return Double.isNaN(hi) ? 1.0 : hi;
+    public double upper() {
+        return rate.upper();
     }
 
     /** Whether a hypothesised miscoverage rate is still standing. */
-    public synchronized boolean contains(double m) {
+    public boolean contains(double m) {
         return lower() <= m && m <= upper();
     }
 
-    private static String fmt(double value) {
+    static String fmt(double value) {
         return String.format("%.4f", value);
-    }
-
-    /**
-     * Wealth from betting against one hypothesised mean, in log space.
-     *
-     * <p>A direct port of {@code CapitalProcess} in {@code eval/sequential.py}. Two books are
-     * kept — one profiting when observations run above {@code m}, one below — and under the
-     * null both are non-negative martingales starting at 1, so Ville's inequality bounds the
-     * chance either ever reaches the rejection level, at any stopping time the observer
-     * likes. The port is only worth what its agreement with the Python is worth, which is
-     * why {@code CoverageMonitorTest} pins it against generated golden vectors.
-     */
-    static final class CapitalProcess {
-
-        private final double m;
-        private final double logReject;
-        private final double alpha;
-
-        private long n;
-        private double sum;
-        private double logUp;
-        private double logDown;
-        private double runningMean = 0.5;       // uniform prior (1/2, 1/4), which is what
-        private double sqDev;                   // keeps the first few bets cautious
-        private double var = 0.25;
-
-        CapitalProcess(double m, double alpha) {
-            if (!(m > 0.0 && m < 1.0)) {
-                throw new IllegalArgumentException("hypothesised mean must be in (0, 1): " + m);
-            }
-            this.m = m;
-            this.alpha = alpha;
-            this.logReject = Math.log(1.0 / (alpha * HEDGE));
-        }
-
-        void update(double x) {
-            if (!(x >= 0.0 && x <= 1.0)) {
-                throw new IllegalArgumentException("observations must lie in [0, 1]: " + x);
-            }
-            long t = n + 1;
-            // Predictable stake: uses only what was known before x arrived, which is the
-            // condition the martingale argument rests on.
-            double stake = Math.sqrt(2.0 * Math.log(2.0 / alpha)
-                    / (var * t * Math.log(1.0 + t)));
-            double edge = x - m;
-            double up = Math.min(stake, BET_FRACTION / m);
-            double down = Math.min(stake, BET_FRACTION / (1.0 - m));
-            logUp += Math.log1p(up * edge);
-            logDown += Math.log1p(-down * edge);
-
-            // Advance the estimates the *next* bet will use. The squared deviation is taken
-            // against the mean as it stood before x arrived, keeping both functions of the
-            // past only.
-            n = t;
-            sum += x;
-            sqDev += (x - runningMean) * (x - runningMean);
-            runningMean = (0.5 + sum) / (1.0 + t);
-            var = (0.25 + sqDev) / (1.0 + t);
-        }
-
-        double logWealth() {
-            return Math.max(logUp, logDown);
-        }
-
-        boolean rejected() {
-            return logWealth() >= logReject;
-        }
     }
 }

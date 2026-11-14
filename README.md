@@ -359,7 +359,9 @@ deleted — the reader sees which sentence lacked support. An answer with a with
 never cached. Uncalibrated (`threshold: -1`) it is observe mode: claims are scored and
 reported, nothing is withheld, and those scores plus a person's label per claim are what
 `python eval/factuality.py labels.jsonl` turns into the threshold to paste. That labelled
-set does not exist yet, so no threshold ships.
+set does not exist yet, so no threshold ships. Once one does, the certificate gets the same
+anytime-valid expiry alarm as coverage (#5), fed the judge's verdict on the text the reader
+was left with — not the full answer, which would blame the filter for the claims it removed.
 
 ### And the tuner has to prove itself now
 
@@ -438,7 +440,7 @@ Because it is: if it computes nDCG wrong, every number downstream is wrong and n
 the build will say so.
 
 ```bash
-make eval-test     # 263 tests, standard library only, no stack, ~90s
+make eval-test     # 267 tests, standard library only, no stack, ~90s
 ```
 
 - **Closed forms** — `(α/2)^(1/n)` at `k = n`, `2^(1-k)` for a uniform improvement, R's
@@ -696,10 +698,9 @@ docs/adr/           every decision, including the ones that overturned earlier o
 
 ## Roadmap
 
-- A certified claim threshold (ADR 0017): serving scores every claim in observe mode today;
-  what is missing is a few hundred of those claims labelled by a person
-- Feeding per-claim judge verdicts to the ADR 0016 monitor, so the claim certificate gets
-  the same expiry alarm the coverage one has
+- A certified claim threshold (ADR 0017): `make collect-claims` gathers observe-mode claims
+  to label and `make certify-claims` turns them into the threshold — what is missing is the
+  person labelling a few hundred of them
 - Groundedness eval as a second CI gate, once a budgeted API key makes LLM-judging in CI viable
 - Claude native citations (exact char-span grounding) when the `claude` provider is configured
 - Calibrating the abstention threshold against judge verdicts rather than the retrieval proxy

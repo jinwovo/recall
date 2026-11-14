@@ -54,6 +54,7 @@ public class RagService {
     private final ConformalSetSizer contextSizer;
     private final CoverageMonitor coverage;
     private final ClaimVerifier claims;
+    private final FactualityMonitor factuality;
     private final QueryLogService queryLog;
     private final ObjectMapper json;
     private final MeterRegistry meters;
@@ -63,7 +64,7 @@ public class RagService {
     public RagService(SearchService search, EmbeddingClient embeddings, SemanticCacheService cache,
                       LlmClient llm, GroundednessJudge judge, SufficiencyCheck sufficiency,
                       ConformalSetSizer contextSizer, CoverageMonitor coverage,
-                      ClaimVerifier claims, QueryLogService queryLog, ObjectMapper json, MeterRegistry meters,
+                      ClaimVerifier claims, FactualityMonitor factuality, QueryLogService queryLog, ObjectMapper json, MeterRegistry meters,
                       RecallProperties props) {
         this.search = search;
         this.embeddings = embeddings;
@@ -74,6 +75,7 @@ public class RagService {
         this.contextSizer = contextSizer;
         this.coverage = coverage;
         this.claims = claims;
+        this.factuality = factuality;
         this.queryLog = queryLog;
         this.json = json;
         this.meters = meters;
@@ -200,6 +202,7 @@ public class RagService {
             // coverage signal serving has — the true one needs a gold label — so the alarm
             // it raises is the judge's view, with the caveats CoverageMonitor documents.
             j.ifPresent(coverage::observe);
+            c.filter(ClaimReport::certified).ifPresent(r -> watchFactuality(query, chunks, answer, r, j));
             // Never cache a judged-unsupported answer or an abstention — a semantic-cache hit
             // replays the answer verbatim and skips re-judging, making a hallucination (or a
             // sampling-artifact "I don't know") sticky across near-duplicate questions. The same
@@ -221,6 +224,33 @@ public class RagService {
         });
 
         return Flux.concat(judging, rest);
+    }
+
+    /**
+     * Feed the claim certificate's monitor (docs/adr/0017) the judge's verdict on the text the
+     * reader was left with. Nothing withheld: that is the full answer, already judged. All
+     * withheld: no claim is left to be wrong, which the calibration also counts as factual.
+     * Otherwise the remaining text is judged once more — detached from the response, because
+     * the reader is not waiting on a number only the alarm reads. The judge is fail-open and
+     * bounded, so a detached call cannot pile up past its own timeout.
+     */
+    private void watchFactuality(String query, List<RetrievedChunk> chunks, String answer,
+                                 ClaimReport report, Optional<Judgment> fullVerdict) {
+        if (!factuality.enabled()) {
+            return;
+        }
+        if (report.withheld() == 0) {
+            fullVerdict.ifPresent(factuality::observe);
+            return;
+        }
+        String kept = report.keptText(answer);
+        if (kept.isBlank()) {
+            factuality.observe(Judgment.Verdict.SUPPORTED.toJudgment());
+            return;
+        }
+        judge.judge(query, chunks, kept).subscribe(
+                verdict -> verdict.ifPresent(factuality::observe),
+                e -> { /* fail-open: an unjudged answer is simply not an observation */ });
     }
 
     private static long elapsedMs(long startNanos) {

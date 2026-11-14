@@ -301,10 +301,15 @@ def load_labels(path: str) -> tuple[list[Answer], list[str | None]]:
             row = json.loads(line)
             claims = []
             for c in row.get("claims", []):
-                if c.get("score") is None or "supported" not in c:
-                    raise ValueError(f"{path}:{lineno}: every claim needs a score and a "
-                                     f"'supported' label (raise recall.rag.factuality.max-claims "
-                                     f"if serving left claims unscored)")
+                if c.get("score") is None:
+                    raise ValueError(f"{path}:{lineno}: a claim has no score (raise "
+                                     f"recall.rag.factuality.max-claims if serving left "
+                                     f"claims unscored)")
+                # A null left by collect_claims.py is "not labelled yet", and bool(None) would
+                # silently read it as "unsupported" — skewing the threshold upward.
+                if not isinstance(c.get("supported"), bool):
+                    raise ValueError(f"{path}:{lineno}: claim {c.get('text', '')[:40]!r} is "
+                                     f"not labelled — 'supported' must be true or false")
                 claims.append(Claim(c["score"], c["supported"]))
             answers.append(claims)
             groups.append(row.get("group"))

@@ -50,6 +50,7 @@ class RagServiceGenerationTimeoutTest {
     private final LlmClient llm = mock(LlmClient.class);
     /** Disabled unless a test enables it — Mockito answers enabled() with false. */
     private final ClaimVerifier claimVerifier = mock(ClaimVerifier.class);
+    private final FactualityMonitor factualityMonitor = mock(FactualityMonitor.class);
 
     /** One chunk, so retrieval neither abstains nor short-circuits to the canned IDK. */
     private static final RetrievedChunk CHUNK =
@@ -85,7 +86,7 @@ class RagServiceGenerationTimeoutTest {
 
         return new RagService(search, embeddings, cache, llm,
                 mock(GroundednessJudge.class), sufficiency, sizer,
-                mock(CoverageMonitor.class), claimVerifier, queryLog, new ObjectMapper(), new SimpleMeterRegistry(), props);
+                mock(CoverageMonitor.class), claimVerifier, factualityMonitor, queryLog, new ObjectMapper(), new SimpleMeterRegistry(), props);
     }
 
     /** Drains the SSE stream, returning the event names in order. */

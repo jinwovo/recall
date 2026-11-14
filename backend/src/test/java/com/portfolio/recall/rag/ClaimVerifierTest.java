@@ -35,7 +35,8 @@ class ClaimVerifierTest {
     private ClaimVerifier verifier(boolean enabled, double threshold, int maxClaims, int timeout) {
         RecallProperties props = new RecallProperties(null, null, null, null, null, null, null,
                 new RecallProperties.Rag(null, null, null, null,
-                        new RecallProperties.Rag.Factuality(enabled, 0.10, threshold, maxClaims, timeout)),
+                        new RecallProperties.Rag.Factuality(enabled, 0.10, threshold, maxClaims, timeout,
+                                0.05, 50)),
                 null);
         return new ClaimVerifier(embeddings, meters, props);
     }

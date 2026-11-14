@@ -34,6 +34,7 @@ The one exception is `plot_anytime.py`, which draws documentation and gates noth
 | `anytime_experiment.py` | reproduces the ADR-0012 tables; `plot_anytime.py` draws them |
 | `ppi_experiment.py` | reproduces the ADR-0015 tables |
 | `factuality_experiment.py` | reproduces the ADR-0017 tables |
+| `collect_claims.py` | observe-mode claims from `/api/ask` into a file a person labels (ADR 0017) |
 | `_mock_reranker.py` | a stand-in `/api/search`, so the tests need no stack |
 
 ```bash
@@ -47,6 +48,7 @@ python beir.py scifact                                         # 5,183 docs, 300
 python anytime_experiment.py                                   # reproduce the ADR-0012 tables
 python ppi_experiment.py                                       # reproduce the ADR-0015 tables
 python factuality_experiment.py                                # reproduce the ADR-0017 tables
+python collect_claims.py gold.jsonl claims-to-label.jsonl      # observe mode -> rows to label
 python factuality.py factuality-labels.example.jsonl           # certify a claim threshold
 python run_qa_eval.py gold.jsonl --human-labels judge-labels.jsonl
 python -m unittest discover -s . -p "test_*.py"                # test the harness itself
