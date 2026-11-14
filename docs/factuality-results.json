@@ -1,0 +1,54 @@
+{
+  "alpha": 0.1,
+  "n_calibration": 300,
+  "n_test": 1000,
+  "runs": 300,
+  "seed": 2026,
+  "promises": {
+    "no filter": {
+      "n": 1000,
+      "all_supported": 0.384,
+      "false_kept_share": 0.187375,
+      "retention": 1.0,
+      "vacuous_rate": 0.0
+    },
+    "all-supported": {
+      "all_supported": 0.8999033333333334,
+      "false_kept_share": 0.02113169841269841,
+      "retention": 0.8832494574917132,
+      "vacuous_rate": 0.0146
+    },
+    "expected-share": {
+      "all_supported": 0.6115766666666667,
+      "false_kept_share": 0.09754890476190477,
+      "retention": 0.9930467641046141,
+      "vacuous_rate": 0.00204
+    }
+  },
+  "groups": {
+    "marginal": {
+      "easy": {
+        "all_supported": 0.97888,
+        "retention": 0.8602644865921896
+      },
+      "hard": {
+        "all_supported": 0.8241533333333334,
+        "retention": 0.8592188117366976
+      }
+    },
+    "per-group": {
+      "easy": {
+        "all_supported": 0.9027733333333333,
+        "retention": 0.9860886194122418
+      },
+      "hard": {
+        "all_supported": 0.9019133333333333,
+        "retention": 0.7762184174899338
+      }
+    }
+  },
+  "shift": {
+    "clean": 0.89911,
+    "distractors": 0.5208233333333334
+  }
+}

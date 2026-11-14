@@ -330,6 +330,29 @@ no guarantee in it.
 → [ADR 0016](docs/adr/0016-adaptive-conformal-drift.md) · `python eval/adaptive_experiment.py`
 reproduces the table
 
+### Next: a guarantee on the answer's own sentences
+
+Everything above certifies the steps *before* the answer — the context, the decision to
+answer, the judge. None of it says which sentence of the answer is true. The groundedness
+judge grades the answer whole, so one invented claim either ships with five good ones or
+takes them down with it.
+
+[ADR 0017](docs/adr/0017-claim-level-conformal-factuality.md) moves the certificate onto the
+claims (Mohri & Hashimoto, ICML 2024; Conformal-RAG, SIGIR 2025): score each claim against
+the retrieved passages, drop what falls under a conformally calibrated threshold, and
+
+```
+P( every claim left in the answer is supported ) >= 1 - alpha
+```
+
+In simulation (`make eval-factuality`, α = 0.10), unfiltered answers are fully supported
+**38%** of the time; filtered, **90.0%**, keeping 88% of the true claims. Calibrated per
+domain, the hard group goes from 82% to the promised 90%. And the limit a 2026 audit of the
+technique found ([arXiv 2603.16817](https://arxiv.org/abs/2603.16817)) is reproduced rather
+than hidden: distractor passages that make false claims look entailed take it to **52%**.
+These are properties of the procedure on a simulated scorer — the calibration layer is
+built and tested; serving it needs labelled, decomposed answers that do not exist yet.
+
 ### And the tuner has to prove itself now
 
 The nightly sweep searches a stratified dev split, and a proposal must survive four guards —
@@ -407,7 +430,7 @@ Because it is: if it computes nDCG wrong, every number downstream is wrong and n
 the build will say so.
 
 ```bash
-make eval-test     # 245 tests, standard library only, no stack, ~65s
+make eval-test     # 259 tests, standard library only, no stack, ~90s
 ```
 
 - **Closed forms** — `(α/2)^(1/n)` at `k = n`, `2^(1-k)` for a uniform improvement, R's
@@ -661,9 +684,13 @@ docs/adr/           every decision, including the ones that overturned earlier o
 - **[ADR 0014 — A benchmark the harness can actually resolve](docs/adr/0014-beir-benchmark-scale.md)**
 - **[ADR 0015 — The LLM judge is a measuring instrument, and it was never calibrated](docs/adr/0015-prediction-powered-inference.md)**
 - **[ADR 0016 — The certificate expires, and nothing tells you](docs/adr/0016-adaptive-conformal-drift.md)**
+- **[ADR 0017 — The guarantee reaches the answer: claim-level conformal factuality](docs/adr/0017-claim-level-conformal-factuality.md)**
 
 ## Roadmap
 
+- Claim-level factuality in serving (ADR 0017): decompose the answer, score each claim with
+  the cross-encoder, drop what falls under the certified threshold — the calibration layer
+  is in `eval/factuality.py`; a labelled set of decomposed answers is what is missing
 - Groundedness eval as a second CI gate, once a budgeted API key makes LLM-judging in CI viable
 - Claude native citations (exact char-span grounding) when the `claude` provider is configured
 - Calibrating the abstention threshold against judge verdicts rather than the retrieval proxy

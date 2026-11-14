@@ -1,4 +1,4 @@
-.PHONY: up down logs backend frontend seed seed-corpus ingest eval eval-gate eval-sweep eval-test eval-stats eval-anytime eval-ppi eval-adaptive beir beir-eval calibrate loadtest
+.PHONY: up down logs backend frontend seed seed-corpus ingest eval eval-gate eval-sweep eval-test eval-stats eval-anytime eval-ppi eval-adaptive eval-factuality beir beir-eval calibrate loadtest
 
 up:            ## start infra (ES, Redis, Postgres, Kafka, MinIO, sidecar, Prometheus, Grafana)
 	docker compose up -d
@@ -47,6 +47,9 @@ eval-ppi:      ## reproduce the judge-calibration experiment (docs/adr/0015) —
 
 eval-adaptive: ## reproduce the drift/adaptive-conformal experiment (docs/adr/0016) — no stack needed
 	cd eval && python adaptive_experiment.py
+
+eval-factuality: ## reproduce the claim-level factuality experiment (docs/adr/0017) — no stack needed
+	cd eval && python factuality_experiment.py --json ../docs/factuality-results.json
 
 beir:          ## fetch a BEIR benchmark: make beir DATASET=scifact (300 queries, 5k docs)
 	cd eval && python beir.py $(or $(DATASET),scifact)

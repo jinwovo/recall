@@ -26,12 +26,14 @@ The one exception is `plot_anytime.py`, which draws documentation and gates noth
 | `sequential.py` | anytime-valid confidence sequences; the early-stopping gate (ADR 0012) |
 | `conformal.py` | coverage and risk guarantees (ADR 0013) |
 | `ppi.py` | a valid interval for a quantity only a biased LLM judge scored (ADR 0015) |
+| `factuality.py` | claim-level conformal factuality: strict, expected-share, per-group (ADR 0017) |
 | `calibrate.py` | drives the API and writes the certificate + config to paste |
 | `power_report.py` | what a gold set can resolve, from the labels alone |
 | `beir.py` | fetch a BEIR benchmark into this repo's format (ADR 0014) |
 | `tune.py` | the nightly sweep, with the four guards that stop it selecting noise |
 | `anytime_experiment.py` | reproduces the ADR-0012 tables; `plot_anytime.py` draws them |
 | `ppi_experiment.py` | reproduces the ADR-0015 tables |
+| `factuality_experiment.py` | reproduces the ADR-0017 tables |
 | `_mock_reranker.py` | a stand-in `/api/search`, so the tests need no stack |
 
 ```bash
@@ -44,6 +46,7 @@ python calibrate.py gold.jsonl                                 # certify context
 python beir.py scifact                                         # 5,183 docs, 300 queries
 python anytime_experiment.py                                   # reproduce the ADR-0012 tables
 python ppi_experiment.py                                       # reproduce the ADR-0015 tables
+python factuality_experiment.py                                # reproduce the ADR-0017 tables
 python run_qa_eval.py gold.jsonl --human-labels judge-labels.jsonl
 python -m unittest discover -s . -p "test_*.py"                # test the harness itself
 # RECALL_API=http://localhost:18080 python run_eval.py gold.jsonl
