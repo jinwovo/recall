@@ -350,8 +350,16 @@ In simulation (`make eval-factuality`, α = 0.10), unfiltered answers are fully 
 domain, the hard group goes from 82% to the promised 90%. And the limit a 2026 audit of the
 technique found ([arXiv 2603.16817](https://arxiv.org/abs/2603.16817)) is reproduced rather
 than hidden: distractor passages that make false claims look entailed take it to **52%**.
-These are properties of the procedure on a simulated scorer — the calibration layer is
-built and tested; serving it needs labelled, decomposed answers that do not exist yet.
+These are properties of the procedure on a simulated scorer.
+
+Serving runs it (`recall.rag.factuality.enabled`): each sentence of the finished answer is
+scored by the cross-encoder against the passages the LLM was shown, in parallel with the
+judge, and a claim at or below the threshold is **struck through in place** rather than
+deleted — the reader sees which sentence lacked support. An answer with a withheld claim is
+never cached. Uncalibrated (`threshold: -1`) it is observe mode: claims are scored and
+reported, nothing is withheld, and those scores plus a person's label per claim are what
+`python eval/factuality.py labels.jsonl` turns into the threshold to paste. That labelled
+set does not exist yet, so no threshold ships.
 
 ### And the tuner has to prove itself now
 
@@ -430,7 +438,7 @@ Because it is: if it computes nDCG wrong, every number downstream is wrong and n
 the build will say so.
 
 ```bash
-make eval-test     # 259 tests, standard library only, no stack, ~90s
+make eval-test     # 263 tests, standard library only, no stack, ~90s
 ```
 
 - **Closed forms** — `(α/2)^(1/n)` at `k = n`, `2^(1-k)` for a uniform improvement, R's
@@ -647,7 +655,7 @@ forensics, and stamps provenance that survives repeated round-trips. Proven end-
 | Method | Path | Notes |
 |---|---|---|
 | `GET` | `/api/search?q=&mode=&rerank=` | `mode` = `hybrid` (default) `\|` `bm25` `\|` `vector` `\|` `hyde`; `rerank` = `cross-encoder` (default) `\|` `m3` |
-| `GET` | `/api/ask?q=` | SSE stream: `sources`, `sufficiency`, `token`, `finish`, `judging`, `groundedness`, `done` |
+| `GET` | `/api/ask?q=` | SSE stream: `sources`, `sufficiency`, `token`, `finish`, `judging`, `groundedness`, `claims`, `done` |
 | `POST` | `/api/ingest` | async index; `202` ⇒ raw doc archived + broker-acked |
 | `GET` | `/api/admin/dlq?limit=` | DLQ depth + bounded peek with decoded forensic headers |
 | `POST` | `/api/admin/dlq/replay?max=` | drain pending DLQ records back onto the ingestion topic |
@@ -688,9 +696,10 @@ docs/adr/           every decision, including the ones that overturned earlier o
 
 ## Roadmap
 
-- Claim-level factuality in serving (ADR 0017): decompose the answer, score each claim with
-  the cross-encoder, drop what falls under the certified threshold — the calibration layer
-  is in `eval/factuality.py`; a labelled set of decomposed answers is what is missing
+- A certified claim threshold (ADR 0017): serving scores every claim in observe mode today;
+  what is missing is a few hundred of those claims labelled by a person
+- Feeding per-claim judge verdicts to the ADR 0016 monitor, so the claim certificate gets
+  the same expiry alarm the coverage one has
 - Groundedness eval as a second CI gate, once a budgeted API key makes LLM-judging in CI viable
 - Claude native citations (exact char-span grounding) when the `claude` provider is configured
 - Calibrating the abstention threshold against judge verdicts rather than the retrieval proxy

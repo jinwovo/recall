@@ -28,7 +28,8 @@ import reactor.core.publisher.Mono;
  * with a post-hoc groundedness judge. Semantic-cache short-circuit and a per-question query
  * log included.
  * SSE event types: {@code sources}, {@code sufficiency}, {@code token}, {@code finish},
- * {@code cache}, {@code judging}, {@code groundedness}, {@code done}, {@code error}.
+ * {@code cache}, {@code judging}, {@code groundedness}, {@code claims}, {@code done},
+ * {@code error}.
  */
 @Service
 public class RagService {
@@ -52,6 +53,7 @@ public class RagService {
     private final SufficiencyCheck sufficiency;
     private final ConformalSetSizer contextSizer;
     private final CoverageMonitor coverage;
+    private final ClaimVerifier claims;
     private final QueryLogService queryLog;
     private final ObjectMapper json;
     private final MeterRegistry meters;
@@ -61,7 +63,7 @@ public class RagService {
     public RagService(SearchService search, EmbeddingClient embeddings, SemanticCacheService cache,
                       LlmClient llm, GroundednessJudge judge, SufficiencyCheck sufficiency,
                       ConformalSetSizer contextSizer, CoverageMonitor coverage,
-                      QueryLogService queryLog, ObjectMapper json, MeterRegistry meters,
+                      ClaimVerifier claims, QueryLogService queryLog, ObjectMapper json, MeterRegistry meters,
                       RecallProperties props) {
         this.search = search;
         this.embeddings = embeddings;
@@ -71,6 +73,7 @@ public class RagService {
         this.sufficiency = sufficiency;
         this.contextSizer = contextSizer;
         this.coverage = coverage;
+        this.claims = claims;
         this.queryLog = queryLog;
         this.json = json;
         this.meters = meters;
@@ -181,9 +184,18 @@ public class RagService {
         Mono<Optional<Judgment>> judgment = judgeable
                 ? judge.judge(query, chunks, answer)
                 : Mono.just(Optional.empty());
+        // Claim scoring (docs/adr/0017) runs beside the judge, not after it: both are
+        // fail-open and bounded, so the tail waits for the slower one rather than the sum.
+        boolean checkable = claims.enabled() && !answer.contains(IDK);
+        Mono<Optional<ClaimReport>> claimReport = checkable
+                ? claims.verify(chunks, answer)
+                : Mono.just(Optional.empty());
 
-        Flux<ServerSentEvent<String>> judging = judgeable ? Flux.just(sse("judging", "")) : Flux.empty();
-        Flux<ServerSentEvent<String>> rest = judgment.flatMapMany(j -> {
+        Flux<ServerSentEvent<String>> judging = judgeable || checkable
+                ? Flux.just(sse("judging", "")) : Flux.empty();
+        Flux<ServerSentEvent<String>> rest = Mono.zip(judgment, claimReport).flatMapMany(both -> {
+            Optional<Judgment> j = both.getT1();
+            Optional<ClaimReport> c = both.getT2();
             // Feed the verdict to the coverage monitor (docs/adr/0016). This is the only
             // coverage signal serving has — the true one needs a gold label — so the alarm
             // it raises is the judge's view, with the caveats CoverageMonitor documents.
@@ -193,11 +205,15 @@ public class RagService {
             // sampling-artifact "I don't know") sticky across near-duplicate questions. The same
             // goes for an answer cut at max_tokens or filtered by the provider: one unlucky
             // generation would otherwise be the answer to every paraphrase until it expired.
+            // An answer with withheld claims is not cached either: the cache stores text, and
+            // replaying it would replay the claims the filter removed.
             boolean cacheable = finish.cacheable()
                     && !answer.contains(IDK)
+                    && c.map(r -> r.withheld() == 0).orElse(true)
                     && j.map(v -> v.verdict() != Judgment.Verdict.UNSUPPORTED).orElse(true);
             return Flux.concat(
                     j.map(v -> Flux.just(sse("groundedness", toJson(v)))).orElseGet(Flux::empty),
+                    c.map(r -> Flux.just(sse("claims", toJson(r)))).orElseGet(Flux::empty),
                     (cacheable ? cache.put(vector, answer, query) : Mono.<Void>empty())
                             .then(queryLog.record(query, "ask", false, chunks.size(), answer.length(),
                                     elapsedMs(start), j.map(Judgment::score).orElse(null)))

@@ -1,6 +1,6 @@
 # ADR 0017 — The guarantee reaches the answer: claim-level conformal factuality
 
-Status: accepted (calibration layer) · serving integration pending · Extends
+Status: accepted · serving in observe mode until a labelled claim set exists · Extends
 [ADR 0013](0013-conformal-risk-control.md), [ADR 0015](0015-prediction-powered-inference.md)
 
 ## Context
@@ -95,13 +95,37 @@ for a version without the `(n+1)` quantile correction (85% coverage at n = 19) a
 control without its `+B` term (10.2% risk against 10%). At n = 200 both broken versions
 pass every other test, which is why that one exists.
 
+## Serving
+
+`ClaimVerifier` runs in the post-answer tail beside the judge (`Mono.zip`, so the tail waits
+for the slower of the two, not their sum):
+
+- **Decomposition** is sentence splitting (`ClaimSplitter`), not an LLM call. Deterministic,
+  free, and every claim is an exact span of the text the reader already has, so the UI can
+  strike it in place. A compound sentence is scored as one claim, which can only make the
+  filter stricter. Citation markers stay in the span and are removed from the scored text.
+- **Scoring** is `max` over the sent passages of the cross-encoder score — one `/rerank`
+  call per claim, four in flight, capped at `max-claims`. Claims past the cap are unscored,
+  kept, and **void the certificate** for that answer (`certified: false` on the event).
+- **Filtering** is `score > threshold`, strictly, matching the calibration. Withheld claims
+  are struck through rather than removed, with the score and threshold on hover.
+- **Fail-open** on timeout or sidecar error, counted as `recall.rag.claims.skipped`.
+- **Cache**: an answer with a withheld claim is not cached — the cache stores the text, and
+  replaying it would replay the claim the filter removed.
+- **Observe mode** (`threshold: -1`): scored and reported, nothing withheld. This is how the
+  calibration set is collected: record the `claims` events, label each claim, and run
+  `python eval/factuality.py labels.jsonl --alpha 0.10`, which prints the certificate and
+  the YAML to paste, and exits non-zero when the certificate is uncertified or vacuous.
+
+Checked in a browser against a stub stream: the withheld sentence renders struck through at
+exactly its offsets, citations inside and around it stay clickable, and the badge reads
+"1 of 3 claims withheld".
+
 ## Consequences
 
 - The answer gains a promise about its own sentences, not only about its context.
-- Serving needs two things that do not exist yet: a claim decomposer (a CHEAP-tier call,
-  or sentence splitting with citations as a first cut) and a labelled calibration set of
-  decomposed answers. The judge-label format of ADR 0015 extends naturally — one row per
-  claim instead of per answer — and PPI is how a small human-labelled set and a large
-  judge-labelled one combine.
+- No threshold ships, because the labelled set of decomposed answers does not exist yet.
+  The judge-label format of ADR 0015 extends naturally — one row per claim instead of per
+  answer — and PPI is how a small human-labelled set and a large judge-labelled one combine.
 - One more threshold to keep exchangeable. It belongs on the ADR 0016 monitor, with the
   judge's per-claim verdicts as the online signal.

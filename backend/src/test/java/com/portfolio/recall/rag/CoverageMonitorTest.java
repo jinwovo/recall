@@ -62,7 +62,8 @@ class CoverageMonitorTest {
                         new RecallProperties.Rag.Sufficiency(false, 0.35, 1),
                         new RecallProperties.Rag.Conformal(sizing, ALPHA, 0.5, 1.0, 12,
                                 monitorEnabled, 0.05, warmup),
-                        new RecallProperties.Rag.Generation(120, 30)),
+                        new RecallProperties.Rag.Generation(120, 30),
+                        RecallProperties.Rag.Factuality.DISABLED),
                 null);
         return new CoverageMonitor(props, new SimpleMeterRegistry());
     }

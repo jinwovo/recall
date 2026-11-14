@@ -277,3 +277,73 @@ def calibrate_by_group(answers: list[Answer], groups: list[str], alpha: float = 
         by[g].append(a)
     fit = calibrate_strict if promise == "all-supported" else calibrate_expected_share
     return {g: fit(members, alpha, min_retention, group=g) for g, members in sorted(by.items())}
+
+
+# --------------------------------------------------------------------------------------
+# CLI — turn labelled claims from serving's observe mode into a threshold
+# --------------------------------------------------------------------------------------
+
+def load_labels(path: str) -> tuple[list[Answer], list[str | None]]:
+    """One JSON object per answer, as observe mode reports it plus a human label per claim:
+
+        {"group": "ingestion", "claims": [{"score": 0.91, "supported": true}, ...]}
+
+    Claims serving left unscored (``score`` null) are rejected rather than skipped: the
+    threshold has to be calibrated on the same population of claims it will filter.
+    """
+    import json
+
+    answers, groups = [], []
+    with open(path, encoding="utf-8") as f:
+        for lineno, line in enumerate(f, start=1):
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            claims = []
+            for c in row.get("claims", []):
+                if c.get("score") is None or "supported" not in c:
+                    raise ValueError(f"{path}:{lineno}: every claim needs a score and a "
+                                     f"'supported' label (raise recall.rag.factuality.max-claims "
+                                     f"if serving left claims unscored)")
+                claims.append(Claim(c["score"], c["supported"]))
+            answers.append(claims)
+            groups.append(row.get("group"))
+    return answers, groups
+
+
+def main(argv=None) -> int:
+    import argparse
+    import json
+
+    ap = argparse.ArgumentParser(description="Certify a claim threshold (docs/adr/0017).")
+    ap.add_argument("labels", help="JSONL of labelled answers (see load_labels)")
+    ap.add_argument("--alpha", type=float, default=0.10)
+    ap.add_argument("--promise", choices=FactualityCertificate.PROMISES, default="all-supported")
+    ap.add_argument("--by-group", action="store_true", help="one certificate per 'group'")
+    ap.add_argument("--json", help="write the certificate(s) here")
+    args = ap.parse_args(argv)
+
+    answers, groups = load_labels(args.labels)
+    fit = calibrate_strict if args.promise == "all-supported" else calibrate_expected_share
+    if args.by_group:
+        certs = calibrate_by_group(answers, [g or "default" for g in groups],
+                                   args.alpha, args.promise)
+    else:
+        certs = {"all": fit(answers, args.alpha)}
+
+    for cert in certs.values():
+        print(cert.statement())
+    marginal = certs.get("all")
+    if marginal is not None and marginal.usable:
+        # Serving applies one threshold; a per-group fit is a report until it can route.
+        threshold = marginal.threshold if math.isfinite(marginal.threshold) else 0.0
+        print("\nrecall.rag.factuality:\n  enabled: true\n"
+              f"  alpha: {args.alpha}\n  threshold: {threshold}")
+    if args.json:
+        with open(args.json, "w", encoding="utf-8") as f:
+            json.dump({g: c.as_dict() for g, c in certs.items()}, f, indent=2)
+    return 0 if all(c.usable for c in certs.values()) else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

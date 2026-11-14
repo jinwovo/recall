@@ -426,6 +426,40 @@
           "legendFormat": "{{reason}}"
         }
       ]
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Claim-level factuality (ADR 0017)",
+      "description": "Claims per second by outcome. 'withheld' scored at or below the certified threshold and were struck from the answer; 'unscored' fell past recall.rag.factuality.max-claims and void the certificate for their answer; 'skipped' answers timed out and were shown unfiltered (fail-open). A rising withheld share at a fixed threshold is drift, not a better filter: the certificate is exchangeability-conditional (ADR 0016).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 64
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (outcome) (rate(recall_rag_claims_total[5m]))",
+          "legendFormat": "{{outcome}}"
+        },
+        {
+          "refId": "B",
+          "expr": "rate(recall_rag_claims_skipped_total[5m])",
+          "legendFormat": "answers skipped (fail-open)"
+        }
+      ]
     }
   ]
 }

@@ -1,0 +1,40 @@
+{"group": "retrieval", "claims": [{"score": 0.7537, "supported": true}, {"score": 0.5803, "supported": true}, {"score": 0.9353, "supported": true}]}
+{"group": "ingestion", "claims": [{"score": 0.5351, "supported": true}, {"score": 0.74, "supported": true}, {"score": 0.6527, "supported": true}, {"score": 0.8276, "supported": true}]}
+{"group": "retrieval", "claims": [{"score": 0.8109, "supported": true}, {"score": 0.2635, "supported": false}, {"score": 0.8642, "supported": true}, {"score": 0.7283, "supported": true}, {"score": 0.3767, "supported": true}, {"score": 0.8971, "supported": true}]}
+{"group": "ingestion", "claims": [{"score": 0.2039, "supported": true}, {"score": 0.4754, "supported": true}, {"score": 0.8303, "supported": true}, {"score": 0.7718, "supported": true}]}
+{"group": "retrieval", "claims": [{"score": 0.8565, "supported": true}, {"score": 0.0684, "supported": false}, {"score": 0.8037, "supported": true}, {"score": 0.5649, "supported": true}]}
+{"group": "ingestion", "claims": [{"score": 0.727, "supported": true}, {"score": 0.9684, "supported": true}, {"score": 0.8962, "supported": true}]}
+{"group": "retrieval", "claims": [{"score": 0.2759, "supported": false}, {"score": 0.5059, "supported": true}, {"score": 0.693, "supported": true}, {"score": 0.8367, "supported": true}, {"score": 0.8075, "supported": true}, {"score": 0.5702, "supported": true}]}
+{"group": "ingestion", "claims": [{"score": 0.9868, "supported": true}, {"score": 0.3236, "supported": false}, {"score": 0.7037, "supported": true}, {"score": 0.6587, "supported": true}, {"score": 0.8004, "supported": true}, {"score": 0.3323, "supported": true}, {"score": 0.6642, "supported": true}]}
+{"group": "retrieval", "claims": [{"score": 0.2459, "supported": false}, {"score": 0.6829, "supported": true}]}
+{"group": "ingestion", "claims": [{"score": 0.9153, "supported": true}, {"score": 0.8068, "supported": true}, {"score": 0.9352, "supported": true}, {"score": 0.5728, "supported": true}, {"score": 0.782, "supported": true}]}
+{"group": "retrieval", "claims": [{"score": 0.8069, "supported": true}, {"score": 0.8443, "supported": true}, {"score": 0.4164, "supported": false}]}
+{"group": "ingestion", "claims": [{"score": 0.4678, "supported": true}, {"score": 0.5916, "supported": true}, {"score": 0.9219, "supported": true}, {"score": 0.7393, "supported": true}]}
+{"group": "retrieval", "claims": [{"score": 0.6569, "supported": true}, {"score": 0.8217, "supported": true}, {"score": 0.7725, "supported": true}, {"score": 0.3363, "supported": false}, {"score": 0.7232, "supported": true}, {"score": 0.8229, "supported": true}, {"score": 0.2109, "supported": false}]}
+{"group": "ingestion", "claims": [{"score": 0.8011, "supported": true}, {"score": 0.2078, "supported": false}, {"score": 0.6084, "supported": true}, {"score": 0.5952, "supported": true}, {"score": 0.2655, "supported": false}, {"score": 0.0831, "supported": false}]}
+{"group": "retrieval", "claims": [{"score": 0.3558, "supported": false}, {"score": 0.7753, "supported": true}, {"score": 0.5304, "supported": true}, {"score": 0.6921, "supported": true}, {"score": 0.9447, "supported": true}, {"score": 0.8868, "supported": true}]}
+{"group": "ingestion", "claims": [{"score": 0.5468, "supported": true}, {"score": 0.8636, "supported": true}, {"score": 0.9453, "supported": true}, {"score": 0.4886, "supported": true}, {"score": 0.8198, "supported": true}]}
+{"group": "retrieval", "claims": [{"score": 0.7148, "supported": true}, {"score": 0.8809, "supported": true}, {"score": 0.2745, "supported": false}]}
+{"group": "ingestion", "claims": [{"score": 0.9586, "supported": true}, {"score": 0.6925, "supported": true}, {"score": 0.7829, "supported": true}]}
+{"group": "retrieval", "claims": [{"score": 0.6743, "supported": true}, {"score": 0.821, "supported": true}]}
+{"group": "ingestion", "claims": [{"score": 0.9426, "supported": true}, {"score": 0.8486, "supported": true}, {"score": 0.8069, "supported": true}, {"score": 0.8592, "supported": true}]}
+{"group": "retrieval", "claims": [{"score": 0.7787, "supported": true}, {"score": 0.1558, "supported": false}, {"score": 0.4445, "supported": true}]}
+{"group": "ingestion", "claims": [{"score": 0.2561, "supported": false}, {"score": 0.7468, "supported": true}]}
+{"group": "retrieval", "claims": [{"score": 0.3012, "supported": false}, {"score": 0.7366, "supported": false}, {"score": 0.7435, "supported": true}]}
+{"group": "ingestion", "claims": [{"score": 0.3128, "supported": false}, {"score": 0.562, "supported": true}, {"score": 0.2775, "supported": false}, {"score": 0.5741, "supported": true}]}
+{"group": "retrieval", "claims": [{"score": 0.7632, "supported": true}, {"score": 0.828, "supported": true}, {"score": 0.7976, "supported": true}]}
+{"group": "ingestion", "claims": [{"score": 0.322, "supported": false}, {"score": 0.4851, "supported": false}, {"score": 0.5609, "supported": false}, {"score": 0.7148, "supported": true}, {"score": 0.763, "supported": true}, {"score": 0.9255, "supported": true}]}
+{"group": "retrieval", "claims": [{"score": 0.3056, "supported": false}, {"score": 0.7802, "supported": true}, {"score": 0.525, "supported": true}, {"score": 0.8166, "supported": true}, {"score": 0.0758, "supported": false}]}
+{"group": "ingestion", "claims": [{"score": 0.8502, "supported": true}, {"score": 0.4687, "supported": false}, {"score": 0.7711, "supported": true}]}
+{"group": "retrieval", "claims": [{"score": 0.8847, "supported": true}, {"score": 0.6907, "supported": true}, {"score": 0.4658, "supported": true}, {"score": 0.8199, "supported": true}, {"score": 0.9213, "supported": true}, {"score": 0.9164, "supported": true}]}
+{"group": "ingestion", "claims": [{"score": 0.6699, "supported": true}, {"score": 0.7781, "supported": true}, {"score": 0.5265, "supported": true}, {"score": 0.1612, "supported": false}, {"score": 0.2465, "supported": false}, {"score": 0.9123, "supported": true}, {"score": 0.9064, "supported": true}]}
+{"group": "retrieval", "claims": [{"score": 0.7013, "supported": true}, {"score": 0.7712, "supported": true}, {"score": 0.784, "supported": true}]}
+{"group": "ingestion", "claims": [{"score": 0.2224, "supported": false}, {"score": 0.8537, "supported": true}, {"score": 0.6074, "supported": true}, {"score": 0.8588, "supported": true}]}
+{"group": "retrieval", "claims": [{"score": 0.7115, "supported": true}, {"score": 0.6059, "supported": true}, {"score": 0.8943, "supported": true}, {"score": 0.6771, "supported": true}, {"score": 0.6752, "supported": true}, {"score": 0.1307, "supported": false}, {"score": 0.4621, "supported": false}]}
+{"group": "ingestion", "claims": [{"score": 0.7894, "supported": true}, {"score": 0.7697, "supported": true}]}
+{"group": "retrieval", "claims": [{"score": 0.6292, "supported": true}, {"score": 0.8642, "supported": true}, {"score": 0.44, "supported": false}, {"score": 0.9164, "supported": true}, {"score": 0.7301, "supported": true}, {"score": 0.8638, "supported": true}]}
+{"group": "ingestion", "claims": [{"score": 0.7299, "supported": true}, {"score": 0.6343, "supported": true}, {"score": 0.9244, "supported": true}, {"score": 0.6069, "supported": false}, {"score": 0.5954, "supported": true}]}
+{"group": "retrieval", "claims": [{"score": 0.2599, "supported": false}, {"score": 0.6163, "supported": true}]}
+{"group": "ingestion", "claims": [{"score": 0.7138, "supported": true}, {"score": 0.846, "supported": true}, {"score": 0.5379, "supported": false}, {"score": 0.4539, "supported": true}]}
+{"group": "retrieval", "claims": [{"score": 0.5488, "supported": true}, {"score": 0.5477, "supported": true}, {"score": 0.9062, "supported": true}, {"score": 0.8827, "supported": true}, {"score": 0.2814, "supported": false}]}
+{"group": "ingestion", "claims": [{"score": 0.6299, "supported": true}, {"score": 0.4688, "supported": true}, {"score": 0.5101, "supported": true}, {"score": 0.9488, "supported": true}, {"score": 0.8055, "supported": true}]}

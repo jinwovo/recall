@@ -47,6 +47,7 @@ python beir.py scifact                                         # 5,183 docs, 300
 python anytime_experiment.py                                   # reproduce the ADR-0012 tables
 python ppi_experiment.py                                       # reproduce the ADR-0015 tables
 python factuality_experiment.py                                # reproduce the ADR-0017 tables
+python factuality.py factuality-labels.example.jsonl           # certify a claim threshold
 python run_qa_eval.py gold.jsonl --human-labels judge-labels.jsonl
 python -m unittest discover -s . -p "test_*.py"                # test the harness itself
 # RECALL_API=http://localhost:18080 python run_eval.py gold.jsonl

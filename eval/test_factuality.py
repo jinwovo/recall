@@ -162,5 +162,53 @@ class GuaranteesBySimulation(unittest.TestCase):
         self.assertFalse(certs["tiny"].certified)
 
 
+
+class CommandLine(unittest.TestCase):
+    """The path from serving's observe mode to a threshold in application.yml."""
+
+    def _write(self, rows):
+        import json, os, tempfile
+        fd, path = tempfile.mkstemp(suffix=".jsonl")
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            for r in rows:
+                f.write(json.dumps(r) + chr(10))
+        self.addCleanup(os.remove, path)
+        return path
+
+    def _rows(self, n, seed=9):
+        rng = random.Random(seed)
+        return [{"claims": [{"score": c.score, "supported": c.supported}
+                            for c in make_answer(rng)]} for _ in range(n)]
+
+    def test_a_usable_certificate_prints_the_config_to_paste(self):
+        import contextlib, io
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = fa.main([self._write(self._rows(100))])
+        self.assertEqual(code, 0)
+        self.assertIn("recall.rag.factuality:", out.getvalue())
+        self.assertIn("threshold:", out.getvalue())
+
+    def test_too_few_answers_exits_nonzero_and_prints_no_config(self):
+        import contextlib, io
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = fa.main([self._write(self._rows(5))])
+        self.assertEqual(code, 1)
+        self.assertNotIn("recall.rag.factuality:", out.getvalue())
+
+    def test_an_unscored_claim_is_rejected_not_skipped(self):
+        path = self._write([{"claims": [{"score": None, "supported": True}]}])
+        with self.assertRaises(ValueError):
+            fa.load_labels(path)
+
+    def test_the_shipped_example_parses(self):
+        import os
+        here = os.path.dirname(os.path.abspath(__file__))
+        answers, groups = fa.load_labels(os.path.join(here, "factuality-labels.example.jsonl"))
+        self.assertEqual(len(answers), 40)
+        self.assertEqual(set(groups), {"ingestion", "retrieval"})
+
+
 if __name__ == "__main__":
     unittest.main()

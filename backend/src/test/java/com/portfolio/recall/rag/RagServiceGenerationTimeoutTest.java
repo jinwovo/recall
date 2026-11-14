@@ -48,6 +48,8 @@ class RagServiceGenerationTimeoutTest {
     private static final Duration PATIENCE = Duration.ofSeconds(15);
 
     private final LlmClient llm = mock(LlmClient.class);
+    /** Disabled unless a test enables it — Mockito answers enabled() with false. */
+    private final ClaimVerifier claimVerifier = mock(ClaimVerifier.class);
 
     /** One chunk, so retrieval neither abstains nor short-circuits to the canned IDK. */
     private static final RetrievedChunk CHUNK =
@@ -77,12 +79,13 @@ class RagServiceGenerationTimeoutTest {
                         new RecallProperties.Rag.Sufficiency(false, 0.35, 5),
                         new RecallProperties.Rag.Conformal(false, 0.10, -1.0, 1.0, 12,
                                 false, 0.05, 0),
-                        new RecallProperties.Rag.Generation(FIRST_TOKEN_SECONDS, STALL_SECONDS)),
+                        new RecallProperties.Rag.Generation(FIRST_TOKEN_SECONDS, STALL_SECONDS),
+                        RecallProperties.Rag.Factuality.DISABLED),
                 null);
 
         return new RagService(search, embeddings, cache, llm,
                 mock(GroundednessJudge.class), sufficiency, sizer,
-                mock(CoverageMonitor.class), queryLog, new ObjectMapper(), new SimpleMeterRegistry(), props);
+                mock(CoverageMonitor.class), claimVerifier, queryLog, new ObjectMapper(), new SimpleMeterRegistry(), props);
     }
 
     /** Drains the SSE stream, returning the event names in order. */

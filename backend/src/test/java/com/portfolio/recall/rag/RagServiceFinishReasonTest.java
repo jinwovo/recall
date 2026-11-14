@@ -42,6 +42,8 @@ class RagServiceFinishReasonTest {
             new RetrievedChunk("c1", "d1", 0, "some grounded passage", "src", "en", 0.9);
 
     private final LlmClient llm = mock(LlmClient.class);
+    /** Disabled unless a test enables it — Mockito answers enabled() with false. */
+    private final ClaimVerifier claimVerifier = mock(ClaimVerifier.class);
     private final SemanticCacheService cache = mock(SemanticCacheService.class);
     private final SimpleMeterRegistry meters = new SimpleMeterRegistry();
 
@@ -69,11 +71,12 @@ class RagServiceFinishReasonTest {
                         new RecallProperties.Rag.Sufficiency(false, 0.35, 5),
                         new RecallProperties.Rag.Conformal(false, 0.10, -1.0, 1.0, 12,
                                 false, 0.05, 0),
-                        new RecallProperties.Rag.Generation(30, 30)),
+                        new RecallProperties.Rag.Generation(30, 30),
+                        RecallProperties.Rag.Factuality.DISABLED),
                 null);
 
         return new RagService(search, embeddings, cache, llm, judge, sufficiency, sizer,
-                mock(CoverageMonitor.class), queryLog, new ObjectMapper(), meters, props);
+                mock(CoverageMonitor.class), claimVerifier, queryLog, new ObjectMapper(), meters, props);
     }
 
     private void provider(FinishReason reason) {
@@ -125,6 +128,37 @@ class RagServiceFinishReasonTest {
         drain();
 
         verify(cache, never()).put(any(), anyString(), anyString());
+    }
+
+    @Test
+    void anAnswerWithWithheldClaimsIsReportedAndNeverCached() {
+        // Same tail, different reason the text must not be replayed: the cache stores the
+        // whole answer, so it would hand back the claim the filter just withheld.
+        provider(FinishReason.COMPLETE);
+        when(claimVerifier.enabled()).thenReturn(true);
+        when(claimVerifier.verify(any(), anyString())).thenReturn(Mono.just(Optional.of(
+                new ClaimReport(0.10, 0.5, true, List.of(
+                        new ClaimReport.Claim(0, 13, 0.9, true),
+                        new ClaimReport.Claim(14, 20, 0.2, false))))));
+
+        List<ServerSentEvent<String>> events = drain();
+
+        assertThat(events).extracting(ServerSentEvent::event)
+                .containsSubsequence("finish", "judging", "claims", "done");
+        assertThat(dataOf(events, "claims")).contains("\"kept\":false").contains("\"certified\":true");
+        verify(cache, never()).put(any(), anyString(), anyString());
+    }
+
+    @Test
+    void anAnswerWhoseClaimsAllStandIsStillCached() {
+        provider(FinishReason.COMPLETE);
+        when(claimVerifier.enabled()).thenReturn(true);
+        when(claimVerifier.verify(any(), anyString())).thenReturn(Mono.just(Optional.of(
+                new ClaimReport(0.10, 0.5, true, List.of(new ClaimReport.Claim(0, 20, 0.9, true))))));
+
+        drain();
+
+        verify(cache).put(any(), anyString(), anyString());
     }
 
     @Test

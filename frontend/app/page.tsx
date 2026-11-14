@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 
 const API = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8080";
 const GITHUB = "https://github.com/jinwovo/recall";
@@ -16,6 +16,14 @@ type Chunk = {
 };
 
 type Groundedness = { verdict: "SUPPORTED" | "PARTIAL" | "UNSUPPORTED"; score: number };
+
+// Claim-level factuality (docs/adr/0017). Offsets index the answer string as streamed.
+type ClaimReport = {
+  alpha: number;
+  threshold: number | null; // null = observe mode: scored, nothing withheld
+  certified: boolean;
+  claims: { start: number; end: number; score: number | null; kept: boolean }[];
+};
 
 type Mode = "hybrid" | "bm25" | "vector" | "hyde";
 const MODES: Mode[] = ["hybrid", "bm25", "vector", "hyde"];
@@ -62,6 +70,7 @@ export default function Home() {
   const [elapsed, setElapsed] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [finish, setFinish] = useState<"TRUNCATED" | "REFUSED" | null>(null);
+  const [claimReport, setClaimReport] = useState<ClaimReport | null>(null);
   const esRef = useRef<EventSource | null>(null);
 
   function reset() {
@@ -78,6 +87,7 @@ export default function Home() {
     setElapsed(null);
     setError(null);
     setFinish(null);
+    setClaimReport(null);
   }
 
   async function search(q = query) {
@@ -132,6 +142,7 @@ export default function Home() {
     });
     es.addEventListener("judging", () => setStage("verifying"));
     es.addEventListener("groundedness", (e) => setGrounded(JSON.parse((e as MessageEvent).data)));
+    es.addEventListener("claims", (e) => setClaimReport(JSON.parse((e as MessageEvent).data)));
     es.addEventListener("done", () => {
       setElapsed(Math.round(performance.now() - started));
       setStage("done");
@@ -185,6 +196,35 @@ export default function Home() {
       return <span key={idx}>{part}</span>;
     });
   }
+
+  // Withheld claims stay visible, struck through in place: deleting them would hide what the
+  // filter did, and the reader should see which sentence lacked support, not a silent gap.
+  function renderChecked(text: string, report: ClaimReport | null) {
+    const withheld = (report?.claims ?? [])
+      .filter((c) => !c.kept && c.end <= text.length)
+      .sort((a, b) => a.start - b.start);
+    if (withheld.length === 0) return renderAnswer(text);
+    const out: ReactNode[] = [];
+    let at = 0;
+    withheld.forEach((c, i) => {
+      if (c.start > at) out.push(<span key={`k${i}`}>{renderAnswer(text.slice(at, c.start))}</span>);
+      out.push(
+        <span
+          key={`w${i}`}
+          data-testid="withheld-claim"
+          title={`Withheld: best passage score ${c.score?.toFixed(3)} is at or below the certified threshold ${report?.threshold?.toFixed(3)}`}
+          className="text-slate-500 line-through decoration-rose-400/70"
+        >
+          {renderAnswer(text.slice(c.start, c.end))}
+        </span>,
+      );
+      at = c.end;
+    });
+    if (at < text.length) out.push(<span key="tail">{renderAnswer(text.slice(at))}</span>);
+    return out;
+  }
+
+  const withheldCount = claimReport?.claims.filter((c) => !c.kept).length ?? 0;
 
   const stageIdx = STEPS.findIndex((s) => s.key === stage);
   const maxScore = Math.max(...sources.map((s) => s.score ?? 0), 1e-9);
@@ -327,6 +367,23 @@ export default function Home() {
                 {finish === "TRUNCATED" ? "cut at token limit — incomplete" : "model declined"}
               </span>
             )}
+            {claimReport && (claimReport.certified || withheldCount > 0) && (
+              <span
+                data-testid="claims-badge"
+                title={claimReport.certified
+                  ? `Every claim left standing is supported with probability at least ${Math.round((1 - claimReport.alpha) * 100)}% (conformal, docs/adr/0017).`
+                  : "Some claims were not scored, so the guarantee does not cover this answer."}
+                className={`rounded-full px-2 py-0.5 text-[11px] ring-1 ${
+                  withheldCount > 0
+                    ? "bg-rose-500/15 text-rose-300 ring-rose-400/30"
+                    : "bg-emerald-500/15 text-emerald-300 ring-emerald-400/30"
+                }`}
+              >
+                {withheldCount > 0
+                  ? `${withheldCount} of ${claimReport.claims.length} claims withheld`
+                  : `all ${claimReport.claims.length} claims certified`}
+              </span>
+            )}
             {grounded && (
               <span
                 data-testid="groundedness-badge"
@@ -346,7 +403,7 @@ export default function Home() {
           <div className="whitespace-pre-wrap text-[15px] leading-relaxed text-slate-200">
             {answer ? (
               <>
-                {renderAnswer(answer)}
+                {renderChecked(answer, claimReport)}
                 {streaming && (
                   <span className="ml-0.5 inline-block h-4 w-[2px] animate-pulse bg-indigo-300 align-middle" />
                 )}

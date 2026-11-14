@@ -60,7 +60,24 @@ public record RecallProperties(
 
     /** RAG answer-quality guardrails (docs/adr/0004, 0009, 0013). */
     public record Rag(Judge judge, Sufficiency sufficiency, Conformal conformal,
-                      Generation generation) {
+                      Generation generation, Factuality factuality) {
+
+        /**
+         * Claim-level factuality filter (docs/adr/0017). Each sentence of a finished answer is
+         * scored against the passages it was generated from (max cross-encoder score), and
+         * claims at or below {@code threshold} are withheld. {@code threshold} is the
+         * certificate printed by {@code python eval/factuality.py} for this {@code alpha};
+         * -1 means uncalibrated: claims are still scored and reported, nothing is withheld,
+         * which is how the labelled calibration set gets collected.
+         */
+        public record Factuality(boolean enabled, double alpha, double threshold,
+                                 int maxClaims, int timeoutSeconds) {
+            public static final Factuality DISABLED = new Factuality(false, 0.10, -1.0, 12, 10);
+
+            public boolean calibrated() {
+                return threshold >= 0.0;
+            }
+        }
 
         /**
          * Bounds on the PRIMARY generation stream — the one path here that is not fail-open,
