@@ -624,7 +624,7 @@ forensics, and stamps provenance that survives repeated round-trips. Proven end-
 | Method | Path | Notes |
 |---|---|---|
 | `GET` | `/api/search?q=&mode=&rerank=` | `mode` = `hybrid` (default) `\|` `bm25` `\|` `vector` `\|` `hyde`; `rerank` = `cross-encoder` (default) `\|` `m3` |
-| `GET` | `/api/ask?q=` | SSE stream: `sources`, `sufficiency`, `token`, `judging`, `groundedness`, `done` |
+| `GET` | `/api/ask?q=` | SSE stream: `sources`, `sufficiency`, `token`, `finish`, `judging`, `groundedness`, `done` |
 | `POST` | `/api/ingest` | async index; `202` ⇒ raw doc archived + broker-acked |
 | `GET` | `/api/admin/dlq?limit=` | DLQ depth + bounded peek with decoded forensic headers |
 | `POST` | `/api/admin/dlq/replay?max=` | drain pending DLQ records back onto the ingestion topic |

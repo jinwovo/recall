@@ -3,7 +3,9 @@ package com.portfolio.recall.rag;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.portfolio.recall.config.RecallProperties;
+import com.portfolio.recall.llm.FinishReason;
 import com.portfolio.recall.llm.LlmClient;
+import com.portfolio.recall.llm.StreamChunk;
 import com.portfolio.recall.search.RetrievedChunk;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.util.List;
@@ -36,7 +38,7 @@ class GroundednessJudgeTest {
     @Test
     void collectsStreamedTokensAndRecordsMetrics() {
         // Judge models stream too — the verdict may arrive split across tokens.
-        GroundednessJudge judge = judge((system, prompt, tier) -> Flux.just("SUPP", "ORTED"), true);
+        GroundednessJudge judge = judge(text("SUPP", "ORTED"), true);
 
         Optional<Judgment> j = judge.judge("q", chunks, "Spring Boot auto-configures beans [1].").block();
 
@@ -57,12 +59,19 @@ class GroundednessJudgeTest {
         AtomicBoolean called = new AtomicBoolean(false);
         GroundednessJudge judge = judge((system, prompt, tier) -> {
             called.set(true);
-            return Flux.just("SUPPORTED");
+            return Flux.just(new StreamChunk.Text("SUPPORTED"));
         }, false);
 
         assertThat(judge.enabled()).isFalse();
         assertThat(judge.judge("q", chunks, "answer").block()).isEmpty();
         assertThat(called).isFalse();
+    }
+
+    /** A provider that streams these chunks and then ends its turn normally. */
+    private static LlmClient text(String... chunks) {
+        return (system, prompt, tier) -> Flux.concat(
+                Flux.fromArray(chunks).<StreamChunk>map(StreamChunk.Text::new),
+                Flux.just(new StreamChunk.End(FinishReason.COMPLETE)));
     }
 
     private GroundednessJudge judge(LlmClient llm, boolean enabled) {

@@ -15,9 +15,11 @@ import com.portfolio.recall.config.RecallProperties;
 import com.portfolio.recall.embedding.EmbeddingClient;
 import com.portfolio.recall.llm.LlmClient;
 import com.portfolio.recall.llm.ModelTier;
+import com.portfolio.recall.llm.StreamChunk;
 import com.portfolio.recall.persistence.QueryLogService;
 import com.portfolio.recall.search.RetrievedChunk;
 import com.portfolio.recall.search.SearchService;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
@@ -80,7 +82,7 @@ class RagServiceGenerationTimeoutTest {
 
         return new RagService(search, embeddings, cache, llm,
                 mock(GroundednessJudge.class), sufficiency, sizer,
-                mock(CoverageMonitor.class), queryLog, new ObjectMapper(), props);
+                mock(CoverageMonitor.class), queryLog, new ObjectMapper(), new SimpleMeterRegistry(), props);
     }
 
     /** Drains the SSE stream, returning the event names in order. */
@@ -90,7 +92,7 @@ class RagServiceGenerationTimeoutTest {
 
     @Test
     void aProviderThatNeverSendsAnythingIsCutOffRatherThanHeldOpen() {
-        when(llm.streamAnswer(anyString(), anyString(), any(ModelTier.class)))
+        when(llm.stream(anyString(), anyString(), any(ModelTier.class)))
                 .thenReturn(Flux.never());
 
         long start = System.nanoTime();
@@ -106,8 +108,8 @@ class RagServiceGenerationTimeoutTest {
     void aStallMidAnswerIsCutAtTheShorterBoundNotTheFirstTokenOne() {
         // The first-token budget is already spent, so the gap that matters now is the stall
         // bound. Sharing one timeout would leave this hanging for the longer prefill budget.
-        when(llm.streamAnswer(anyString(), anyString(), any(ModelTier.class)))
-                .thenReturn(Flux.concat(Flux.just("partial"), Flux.never()));
+        when(llm.stream(anyString(), anyString(), any(ModelTier.class)))
+                .thenReturn(Flux.concat(Flux.just(new StreamChunk.Text("partial")), Flux.never()));
 
         long start = System.nanoTime();
         List<String> events = eventsOf(service().ask("q"));
@@ -121,8 +123,9 @@ class RagServiceGenerationTimeoutTest {
     void aSlowButSteadyAnswerIsNotCutOff() {
         // Total elapsed exceeds the stall bound several times over; no single gap does. A
         // deadline on the answer would kill this, which is the reason the bound is on the gap.
-        when(llm.streamAnswer(anyString(), anyString(), any(ModelTier.class)))
-                .thenReturn(Flux.interval(Duration.ofMillis(300)).take(8).map(i -> "tok" + i));
+        when(llm.stream(anyString(), anyString(), any(ModelTier.class)))
+                .thenReturn(Flux.interval(Duration.ofMillis(300)).take(8)
+                        .map(i -> new StreamChunk.Text("tok" + i)));
 
         List<String> events = eventsOf(service().ask("q"));
 

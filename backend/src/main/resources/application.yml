@@ -130,9 +130,10 @@ recall:
   llm:                         # provider toggle: claude (default) | groq (free)
     provider: ${LLM_PROVIDER:claude}
     # Output ceiling for every provider. A hard cut, not a hint — the answer stops
-    # mid-sentence when it binds, and a truncated answer is still judged and cached like a
-    # finished one. Sized for a grounded answer with citations; the CHEAP-tier one-word
-    # verdicts stop long before it.
+    # mid-sentence when it binds. The provider's stop reason is read, so a cut answer is
+    # shown with a badge and never cached (recall_rag_generation_finish_total{reason}).
+    # Sized for a grounded answer with citations; the CHEAP-tier one-word verdicts stop
+    # long before it.
     max-tokens: ${LLM_MAX_TOKENS:4096}
     groq:
       base-url: ${GROQ_BASE_URL:https://api.groq.com/openai/v1}

@@ -1,8 +1,8 @@
 package com.portfolio.recall.llm;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.portfolio.recall.config.RecallProperties;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.util.List;
 import java.util.Map;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -25,42 +25,35 @@ public class OllamaClient implements LlmClient {
     private final String model;
     private final long maxTokens;
     private final ObjectMapper json;
+    private final MeterRegistry meters;
 
-    public OllamaClient(WebClient.Builder builder, RecallProperties props, ObjectMapper json) {
+    public OllamaClient(WebClient.Builder builder, RecallProperties props, ObjectMapper json,
+                      MeterRegistry meters) {
         this.web = builder.baseUrl(props.llm().ollama().baseUrl()).build();
         this.model = props.llm().ollama().model();
         this.maxTokens = props.llm().maxTokens();
         this.json = json;
+        this.meters = meters;
     }
 
     @Override
-    public Flux<String> streamAnswer(String system, String userPrompt, ModelTier tier) {
+    public Flux<StreamChunk> stream(String system, String userPrompt, ModelTier tier) {
         Map<String, Object> body = Map.of(
                 "model", model,
                 "stream", true,
+                // Without this Ollama sends no usage at all; with it, one final chunk does.
+                "stream_options", Map.of("include_usage", true),
                 "max_tokens", maxTokens,
                 "messages", List.of(
                         Map.of("role", "system", "content", system),
                         Map.of("role", "user", "content", userPrompt)));
-        return web.post()
+        Flux<String> data = web.post()
                 .uri("/chat/completions")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(body)
                 .retrieve()
                 .bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {})
-                .map(ServerSentEvent::data)
-                .filter(d -> d != null)
-                .takeWhile(d -> !"[DONE]".equals(d))
-                .mapNotNull(this::extractDelta)
-                .filter(s -> !s.isEmpty());
-    }
-
-    private String extractDelta(String data) {
-        try {
-            JsonNode content = json.readTree(data).path("choices").path(0).path("delta").path("content");
-            return content.isTextual() ? content.asText() : "";
-        } catch (Exception e) {
-            return "";
-        }
+                .mapNotNull(ServerSentEvent::data);
+        return OpenAiCompatStream.decode(data, json, meters, model);
     }
 }

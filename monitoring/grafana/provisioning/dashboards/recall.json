@@ -395,6 +395,37 @@
           "legendFormat": "cache full, answer refused"
         }
       ]
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Why generation stopped (share of answers)",
+      "description": "Share of streamed answers by finish reason. 'truncated' means the answer hit recall.llm.max-tokens and stops mid-sentence: it is still shown (with a badge) but never cached. A rising truncated share is the signal to raise max-tokens or shorten the context; 'unreported' is a provider that does not say, and is treated as complete.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 56
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (reason) (rate(recall_rag_generation_finish_total[5m])) / ignoring(reason) group_left sum(rate(recall_rag_generation_finish_total[5m]))",
+          "legendFormat": "{{reason}}"
+        }
+      ]
     }
   ]
 }

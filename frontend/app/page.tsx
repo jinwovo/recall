@@ -61,6 +61,7 @@ export default function Home() {
   const [ttft, setTtft] = useState<number | null>(null);
   const [elapsed, setElapsed] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [finish, setFinish] = useState<"TRUNCATED" | "REFUSED" | null>(null);
   const esRef = useRef<EventSource | null>(null);
 
   function reset() {
@@ -76,6 +77,7 @@ export default function Home() {
     setTtft(null);
     setElapsed(null);
     setError(null);
+    setFinish(null);
   }
 
   async function search(q = query) {
@@ -121,6 +123,12 @@ export default function Home() {
         setTtft(Math.round(performance.now() - started));
       }
       setAnswer((a) => a + JSON.parse((e as MessageEvent).data));
+    });
+    // Why generation stopped. Only the two abnormal endings change what the reader sees: an
+    // answer cut at the token budget stops mid-sentence with no error to explain it.
+    es.addEventListener("finish", (e) => {
+      const { reason } = JSON.parse((e as MessageEvent).data);
+      if (reason === "TRUNCATED" || reason === "REFUSED") setFinish(reason);
     });
     es.addEventListener("judging", () => setStage("verifying"));
     es.addEventListener("groundedness", (e) => setGrounded(JSON.parse((e as MessageEvent).data)));
@@ -306,6 +314,17 @@ export default function Home() {
                 className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] text-amber-300 ring-1 ring-amber-400/30"
               >
                 insufficient context — abstained
+              </span>
+            )}
+            {finish && (
+              <span
+                data-testid="finish-badge"
+                title={finish === "TRUNCATED"
+                  ? "Generation hit the output token limit (recall.llm.max-tokens). The answer is incomplete and was not cached."
+                  : "The model declined to answer. Nothing was cached."}
+                className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] text-amber-300 ring-1 ring-amber-400/30"
+              >
+                {finish === "TRUNCATED" ? "cut at token limit — incomplete" : "model declined"}
               </span>
             )}
             {grounded && (

@@ -1,8 +1,8 @@
 package com.portfolio.recall.llm;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.portfolio.recall.config.RecallProperties;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.util.List;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
@@ -26,8 +26,9 @@ public class GroqClient implements LlmClient {
     private final String model;
     private final long maxTokens;
     private final ObjectMapper json;
+    private final MeterRegistry meters;
 
-    public GroqClient(WebClient.Builder builder, RecallProperties props, ObjectMapper json,
+    public GroqClient(WebClient.Builder builder, RecallProperties props, ObjectMapper json, MeterRegistry meters,
                       @Value("${GROQ_API_KEY:}") String apiKey) {
         this.web = builder
                 .baseUrl(props.llm().groq().baseUrl())
@@ -36,10 +37,11 @@ public class GroqClient implements LlmClient {
         this.model = props.llm().groq().model();
         this.maxTokens = props.llm().maxTokens();
         this.json = json;
+        this.meters = meters;
     }
 
     @Override
-    public Flux<String> streamAnswer(String system, String userPrompt, ModelTier tier) {
+    public Flux<StreamChunk> stream(String system, String userPrompt, ModelTier tier) {
         Map<String, Object> body = Map.of(
                 "model", model,
                 "stream", true,
@@ -48,26 +50,13 @@ public class GroqClient implements LlmClient {
                         Map.of("role", "system", "content", system),
                         Map.of("role", "user", "content", userPrompt)));
 
-        return web.post()
+        Flux<String> data = web.post()
                 .uri("/chat/completions")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(body)
                 .retrieve()
                 .bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {})
-                .map(ServerSentEvent::data)
-                .filter(d -> d != null)
-                .takeWhile(d -> !"[DONE]".equals(d))
-                .mapNotNull(this::extractDelta)
-                .filter(s -> !s.isEmpty());
-    }
-
-    /** Pull choices[0].delta.content from one streamed chunk. */
-    private String extractDelta(String data) {
-        try {
-            JsonNode content = json.readTree(data).path("choices").path(0).path("delta").path("content");
-            return content.isTextual() ? content.asText() : "";
-        } catch (Exception e) {
-            return "";
-        }
+                .mapNotNull(ServerSentEvent::data);
+        return OpenAiCompatStream.decode(data, json, meters, model);
     }
 }

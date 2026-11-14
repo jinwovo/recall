@@ -4,14 +4,19 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.portfolio.recall.cache.SemanticCacheService;
 import com.portfolio.recall.config.RecallProperties;
 import com.portfolio.recall.embedding.EmbeddingClient;
+import com.portfolio.recall.llm.FinishReason;
 import com.portfolio.recall.llm.LlmClient;
 import com.portfolio.recall.llm.ModelTier;
+import com.portfolio.recall.llm.StreamChunk;
 import com.portfolio.recall.persistence.QueryLogService;
 import com.portfolio.recall.search.RetrievedChunk;
 import com.portfolio.recall.search.SearchService;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -22,8 +27,8 @@ import reactor.core.publisher.Mono;
  * gate → assemble grounded prompt → stream answer over SSE, then grade the finished answer
  * with a post-hoc groundedness judge. Semantic-cache short-circuit and a per-question query
  * log included.
- * SSE event types: {@code sources}, {@code sufficiency}, {@code token}, {@code cache},
- * {@code judging}, {@code groundedness}, {@code done}, {@code error}.
+ * SSE event types: {@code sources}, {@code sufficiency}, {@code token}, {@code finish},
+ * {@code cache}, {@code judging}, {@code groundedness}, {@code done}, {@code error}.
  */
 @Service
 public class RagService {
@@ -49,13 +54,15 @@ public class RagService {
     private final CoverageMonitor coverage;
     private final QueryLogService queryLog;
     private final ObjectMapper json;
+    private final MeterRegistry meters;
     private final Duration firstTokenTimeout;
     private final Duration stallTimeout;
 
     public RagService(SearchService search, EmbeddingClient embeddings, SemanticCacheService cache,
                       LlmClient llm, GroundednessJudge judge, SufficiencyCheck sufficiency,
                       ConformalSetSizer contextSizer, CoverageMonitor coverage,
-                      QueryLogService queryLog, ObjectMapper json, RecallProperties props) {
+                      QueryLogService queryLog, ObjectMapper json, MeterRegistry meters,
+                      RecallProperties props) {
         this.search = search;
         this.embeddings = embeddings;
         this.cache = cache;
@@ -66,6 +73,7 @@ public class RagService {
         this.coverage = coverage;
         this.queryLog = queryLog;
         this.json = json;
+        this.meters = meters;
         this.firstTokenTimeout =
                 Duration.ofSeconds(props.rag().generation().firstTokenTimeoutSeconds());
         this.stallTimeout =
@@ -124,10 +132,11 @@ public class RagService {
 
                 String prompt = buildPrompt(query, chunks);
                 StringBuilder answer = new StringBuilder();
+                AtomicReference<FinishReason> finish = new AtomicReference<>(FinishReason.UNREPORTED);
 
                 Flux<ServerSentEvent<String>> sources = Flux.just(sse("sources", toJson(chunks)));
                 Flux<ServerSentEvent<String>> tokens = llm
-                        .streamAnswer(SYSTEM_PROMPT, prompt, ModelTier.PRIMARY)
+                        .stream(SYSTEM_PROMPT, prompt, ModelTier.PRIMARY)
                         // The only path here without a fallback, so it is the only one that
                         // must not fail open: bound the gap between tokens rather than the
                         // answer. A provider that stops sending would otherwise hold the SSE
@@ -137,11 +146,23 @@ public class RagService {
                         // sized for a local CPU model would let a mid-answer stall run just
                         // as long.
                         .timeout(Mono.delay(firstTokenTimeout), t -> Mono.delay(stallTimeout))
-                        .doOnNext(answer::append)
-                        .map(t -> sse("token", toJson(t)));
+                        .concatMap(chunk -> switch (chunk) {
+                            case StreamChunk.Text t -> {
+                                answer.append(t.text());
+                                yield Flux.just(sse("token", toJson(t.text())));
+                            }
+                            // The reader is told why the answer stopped, not only that it did:
+                            // a max_tokens cut ends mid-sentence with no error to explain it.
+                            case StreamChunk.End e -> {
+                                finish.set(e.reason());
+                                meters.counter("recall.rag.generation.finish",
+                                        "reason", e.reason().name().toLowerCase()).increment();
+                                yield Flux.just(sse("finish", toJson(Map.of("reason", e.reason()))));
+                            }
+                        });
                 // TODO: switch [n] citations → Claude native citations (claude provider + paid key).
                 Flux<ServerSentEvent<String>> tail =
-                        Flux.defer(() -> judged(query, vector, chunks, answer.toString(), start));
+                        Flux.defer(() -> judged(query, vector, chunks, answer.toString(), finish.get(), start));
 
                 return Flux.concat(sources, tokens, tail);
             });
@@ -154,7 +175,8 @@ public class RagService {
      * declining to answer is the guardrail working, not a hallucination.
      */
     private Flux<ServerSentEvent<String>> judged(String query, float[] vector,
-                                                 List<RetrievedChunk> chunks, String answer, long start) {
+                                                 List<RetrievedChunk> chunks, String answer, FinishReason finish,
+                                                 long start) {
         boolean judgeable = judge.enabled() && !answer.contains(IDK);
         Mono<Optional<Judgment>> judgment = judgeable
                 ? judge.judge(query, chunks, answer)
@@ -168,8 +190,11 @@ public class RagService {
             j.ifPresent(coverage::observe);
             // Never cache a judged-unsupported answer or an abstention — a semantic-cache hit
             // replays the answer verbatim and skips re-judging, making a hallucination (or a
-            // sampling-artifact "I don't know") sticky across near-duplicate questions.
-            boolean cacheable = !answer.contains(IDK)
+            // sampling-artifact "I don't know") sticky across near-duplicate questions. The same
+            // goes for an answer cut at max_tokens or filtered by the provider: one unlucky
+            // generation would otherwise be the answer to every paraphrase until it expired.
+            boolean cacheable = finish.cacheable()
+                    && !answer.contains(IDK)
                     && j.map(v -> v.verdict() != Judgment.Verdict.UNSUPPORTED).orElse(true);
             return Flux.concat(
                     j.map(v -> Flux.just(sse("groundedness", toJson(v)))).orElseGet(Flux::empty),
