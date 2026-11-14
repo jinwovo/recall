@@ -18,10 +18,10 @@ ARG TORCH_VERSION=2.13.0
 RUN pip install --no-cache-dir --index-url ${TORCH_INDEX_URL} "torch==${TORCH_VERSION}"
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-# FlagEmbedding 1.3.4 imports is_torch_fx_available, which newer transformers removed.
-# Pin a compatible transformers (separate layer keeps the cached torch install intact).
-RUN pip install --no-cache-dir "transformers==4.45.2"
+# Every FlagEmbedding dependency is pinned in requirements.txt, transformers included, so
+# one resolver pass picks a consistent set. Forcing transformers in a later layer, as this
+# file used to, skipped the resolver and left whatever it had already chosen incompatible.
+RUN pip install --no-cache-dir -r requirements.txt && pip check
 COPY app ./app
 EXPOSE 8000
 # First start downloads model weights (cache the HF dir via a volume).
