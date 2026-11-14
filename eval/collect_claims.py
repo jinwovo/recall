@@ -6,10 +6,13 @@ Runs each question through /api/ask with the claim filter in observe mode
 (recall.rag.factuality.enabled=true, threshold=-1), and writes one row per answer:
 
     {"query": "...", "group": "...",
+     "passages": [{"n": 1, "source": "...", "content": "..."}, ...],
      "claims": [{"text": "...", "score": 0.91, "supported": null}, ...]}
 
-A person replaces every ``null`` with true or false — "do the passages this answer was
-generated from support this sentence?" — and the file goes straight into
+``passages`` are exactly the ones the LLM was shown (the ``sources`` event), numbered as the
+answer cites them, because the question a labeller answers is about those passages and
+nothing else. A person replaces every ``null`` with true or false following
+docs/LABELING-GUIDE.md, and the file goes straight into
 ``python factuality.py claims-to-label.jsonl``, which refuses any claim left unlabelled.
 
 Answers served from the semantic cache, abstentions and answers whose claims were not all
@@ -52,11 +55,13 @@ def read_sse(lines):
 def ask(query: str, api: str | None = None) -> dict:
     """The answer text and the claims report for one question (None when there is none)."""
     url = f"{api or API}/api/ask?q=" + urllib.parse.quote(query)
-    answer, report, cached, error = [], None, False, None
+    answer, report, cached, error, sources = [], None, False, None, []
     with urllib.request.urlopen(url, timeout=ASK_TIMEOUT) as r:
         lines = (b.decode("utf-8") for b in r)
         for event, data in read_sse(lines):
-            if event == "token":
+            if event == "sources":
+                sources = json.loads(data)
+            elif event == "token":
                 answer.append(json.loads(data))
             elif event == "claims":
                 report = json.loads(data)
@@ -66,7 +71,8 @@ def ask(query: str, api: str | None = None) -> dict:
                 error = data
             elif event == "done":
                 break
-    return {"answer": "".join(answer), "claims": report, "cached": cached, "error": error}
+    return {"answer": "".join(answer), "claims": report, "cached": cached, "error": error,
+            "sources": sources}
 
 
 def to_row(query: str, group, result: dict) -> tuple[dict | None, str | None]:
@@ -85,7 +91,9 @@ def to_row(query: str, group, result: dict) -> tuple[dict | None, str | None]:
     if any(c.get("score") is None for c in claims):
         return None, "unscored claims (raise recall.rag.factuality.max-claims)"
     text = result["answer"]
-    return {"query": query, "group": group,
+    passages = [{"n": i, "source": s.get("source"), "content": s.get("content")}
+                for i, s in enumerate(result.get("sources") or [], start=1)]
+    return {"query": query, "group": group, "passages": passages,
             "claims": [{"text": text[c["start"]:c["end"]], "score": c["score"],
                         "supported": None} for c in claims]}, None
 

@@ -40,6 +40,10 @@ class Stub(BaseHTTPRequestHandler):
 
         if q == "cached":
             ev("cache", "hit")
+        else:
+            ev("sources", json.dumps([
+                {"chunkId": "c1", "source": "bm25.md", "content": "BM25 ranks by term statistics."},
+                {"chunkId": "c2", "source": "rrf.md", "content": "RRF fuses rankings."}]))
         for i in range(0, len(ANSWER), 7):
             ev("token", json.dumps(ANSWER[i:i + 7]))
         if q == "calibrated":
@@ -93,6 +97,9 @@ class CollectClaims(unittest.TestCase):
         self.assertEqual([c["text"] for c in row["claims"]], [
             "BM25 ranks by term statistics [1].", "It was invented in 2031.", "RRF fuses both."])
         self.assertTrue(all(c["supported"] is None for c in row["claims"]))
+        # The labeller judges against these and nothing else, numbered as the answer cites.
+        self.assertEqual([(p["n"], p["source"]) for p in row["passages"]],
+                         [(1, "bm25.md"), (2, "rrf.md")])
 
     def test_answers_the_filter_would_not_see_are_skipped_with_a_reason(self):
         out = self._tmp()

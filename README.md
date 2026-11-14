@@ -1,5 +1,7 @@
 # Recall — a RAG system that can prove its own claims
 
+**English** · [한국어](README.ko.md) · [日本語](README.ja.md) · [简体中文](README.zh-CN.md)
+
 [![CI](https://github.com/jinwovo/recall/actions/workflows/ci.yml/badge.svg)](https://github.com/jinwovo/recall/actions/workflows/ci.yml)
 [![eval](https://github.com/jinwovo/recall/actions/workflows/eval.yml/badge.svg)](https://github.com/jinwovo/recall/actions/workflows/eval.yml)
 
@@ -457,7 +459,7 @@ make eval-test     # 267 tests, standard library only, no stack, ~90s
   hand, driving all four gate policies into both outcomes and asserting the sequential one's
   saving is real requests not sent.
 
-Plus 85 backend unit tests and three Testcontainers integration suites against real ES, Kafka
+Plus 117 backend unit tests and three Testcontainers integration suites against real ES, Kafka
 and MinIO.
 
 ---
@@ -700,24 +702,10 @@ docs/adr/           every decision, including the ones that overturned earlier o
 
 - A certified claim threshold (ADR 0017): `make collect-claims` gathers observe-mode claims
   to label and `make certify-claims` turns them into the threshold — what is missing is the
-  person labelling a few hundred of them
+  person labelling a few hundred of them, per the [labeling guide](docs/LABELING-GUIDE.md)
 - Groundedness eval as a second CI gate, once a budgeted API key makes LLM-judging in CI viable
 - Claude native citations (exact char-span grounding) when the `claude` provider is configured
 - Calibrating the abstention threshold against judge verdicts rather than the retrieval proxy
-
-## 한국어 요약
-
-기술 지식베이스 대상 **하이브리드 검색(BM25+벡터) + RAG 질의응답** 플랫폼입니다. 다만 이 저장소의
-중심은 검색이 아니라 **측정**입니다 — 처음 만든 시스템의 품질 주장을 검증할 도구를 나중에 만들었고,
-그 도구를 이 저장소의 README에 먼저 겨눴더니 헤드라인 세 개가 무너졌습니다(`Recall@5 = 1.00`은
-실제로 `[0.69, 1.00]`, "BM25 대비 +0.30"은 p=0.25이며 그 0.25가 도달 가능한 최선값, 야간 자가튜닝은
-7,000개 쿼리가 필요한 차이를 10개로 판정 중).
-
-그래서 세 가지를 **보증(guarantee)** 으로 바꿨습니다: (1) 언제 들여다봐도 유효한 평가
-(anytime-valid confidence sequence) — 판정이 결정되는 즉시 중단해 쿼리 예산 70–90% 절감,
-(2) 컨텍스트 크기와 기권 임계값의 **분포무관·유한표본 보증**(conformal risk control) — 동일 보증
-하에 프롬프트 토큰 40% 절감, (3) BEIR 벤치마크로 실제 판별 가능한 규모 확보. 설계 근거는
-[`docs/adr/`](docs/adr/) 0011–0014에 있습니다.
 
 ## License
 

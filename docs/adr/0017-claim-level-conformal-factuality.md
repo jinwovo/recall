@@ -118,7 +118,9 @@ for the slower of the two, not their sum):
      claims — text, score, `"supported": null` — to `eval/claims-to-label.jsonl`. Cache hits,
      abstentions, answers with unscored claims and answers served under an *active* filter
      are skipped and counted: none of them is the population the threshold will filter.
-  2. A person sets every `null` to `true` or `false`.
+  2. A person sets every `null` to `true` or `false`, following the
+     [labeling guide](../LABELING-GUIDE.md). Each row carries the passages the LLM was shown,
+     numbered as the answer cites them, because those are the only thing a label may judge.
   3. `make certify-claims` prints the certificate and the YAML to paste, and exits non-zero
      when it is uncertified or vacuous. A claim still `null` is refused, not read as
      `false` — `bool(None)` would have silently pushed the threshold up.
