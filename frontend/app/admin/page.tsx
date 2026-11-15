@@ -252,6 +252,10 @@ export default function Admin() {
           Search
         </Link>
         <span>·</span>
+        <Link className="transition hover:text-slate-300" href="/admin/review">
+          Review queue
+        </Link>
+        <span>·</span>
         <a className="transition hover:text-slate-300" href="http://localhost:3001" target="_blank" rel="noreferrer">
           Grafana
         </a>

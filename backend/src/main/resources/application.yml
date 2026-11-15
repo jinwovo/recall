@@ -144,6 +144,18 @@ recall:
       monitor-enabled: ${RAG_CONFORMAL_MONITOR_ENABLED:true}
       monitor-alpha: ${RAG_CONFORMAL_MONITOR_ALPHA:0.05}   # false alarms over the whole stream, not per check
       monitor-warmup: ${RAG_CONFORMAL_MONITOR_WARMUP:50}   # judged answers before the alarm can fire
+  review:                      # active review queue for the true groundedness rate (docs/adr/0018)
+    # Every judged answer is logged with the probability it had of being sent to a human, and
+    # a coin with that bias decides. Labels weighted by 1/pi give an unbiased estimate of the
+    # TRUE rate, whatever the judge got wrong: `curl /api/admin/review/export > x.jsonl &&
+    # python eval/active.py x.jsonl`. Start uniform (all three equal = PPI); after the first
+    # labelled period, `active.py --budget 0.05` prints per-verdict values that spend the same
+    # budget where this judge actually errs. Never 0: an answer that cannot be selected
+    # cannot be corrected.
+    enabled: ${REVIEW_ENABLED:false}
+    pi-supported: ${REVIEW_PI_SUPPORTED:0.05}
+    pi-partial: ${REVIEW_PI_PARTIAL:0.05}
+    pi-unsupported: ${REVIEW_PI_UNSUPPORTED:0.05}
   llm:                         # provider toggle: claude (default) | groq (free)
     provider: ${LLM_PROVIDER:claude}
     # Output ceiling for every provider. A hard cut, not a hint — the answer stops

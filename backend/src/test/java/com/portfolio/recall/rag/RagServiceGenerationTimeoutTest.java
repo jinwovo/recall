@@ -86,7 +86,8 @@ class RagServiceGenerationTimeoutTest {
 
         return new RagService(search, embeddings, cache, llm,
                 mock(GroundednessJudge.class), sufficiency, sizer,
-                mock(CoverageMonitor.class), claimVerifier, factualityMonitor, queryLog, new ObjectMapper(), new SimpleMeterRegistry(), props);
+                mock(CoverageMonitor.class), claimVerifier, factualityMonitor,
+                mock(com.portfolio.recall.review.ReviewSampler.class), queryLog, new ObjectMapper(), new SimpleMeterRegistry(), props);
     }
 
     /** Drains the SSE stream, returning the event names in order. */

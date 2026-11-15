@@ -9,6 +9,7 @@ import com.portfolio.recall.llm.LlmClient;
 import com.portfolio.recall.llm.ModelTier;
 import com.portfolio.recall.llm.StreamChunk;
 import com.portfolio.recall.persistence.QueryLogService;
+import com.portfolio.recall.review.ReviewSampler;
 import com.portfolio.recall.search.RetrievedChunk;
 import com.portfolio.recall.search.SearchService;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -55,6 +56,7 @@ public class RagService {
     private final CoverageMonitor coverage;
     private final ClaimVerifier claims;
     private final FactualityMonitor factuality;
+    private final ReviewSampler review;
     private final QueryLogService queryLog;
     private final ObjectMapper json;
     private final MeterRegistry meters;
@@ -64,7 +66,8 @@ public class RagService {
     public RagService(SearchService search, EmbeddingClient embeddings, SemanticCacheService cache,
                       LlmClient llm, GroundednessJudge judge, SufficiencyCheck sufficiency,
                       ConformalSetSizer contextSizer, CoverageMonitor coverage,
-                      ClaimVerifier claims, FactualityMonitor factuality, QueryLogService queryLog, ObjectMapper json, MeterRegistry meters,
+                      ClaimVerifier claims, FactualityMonitor factuality, ReviewSampler review,
+                      QueryLogService queryLog, ObjectMapper json, MeterRegistry meters,
                       RecallProperties props) {
         this.search = search;
         this.embeddings = embeddings;
@@ -76,6 +79,7 @@ public class RagService {
         this.coverage = coverage;
         this.claims = claims;
         this.factuality = factuality;
+        this.review = review;
         this.queryLog = queryLog;
         this.json = json;
         this.meters = meters;
@@ -203,6 +207,10 @@ public class RagService {
             // it raises is the judge's view, with the caveats CoverageMonitor documents.
             j.ifPresent(coverage::observe);
             c.filter(ClaimReport::certified).ifPresent(r -> watchFactuality(query, chunks, answer, r, j));
+            // Toss this answer's review coin (docs/adr/0018). Every judged answer enters the
+            // ledger, selected or not: the judge's verdict on the unselected ones is half of
+            // the estimate of the true groundedness rate, the human labels are the other half.
+            j.ifPresent(v -> review.offer(query, chunks, answer, v, c));
             // Never cache a judged-unsupported answer or an abstention — a semantic-cache hit
             // replays the answer verbatim and skips re-judging, making a hallucination (or a
             // sampling-artifact "I don't know") sticky across near-duplicate questions. The same

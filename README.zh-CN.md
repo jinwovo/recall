@@ -308,6 +308,26 @@ passage 对照打分,与 judge 并行进行;得分不高于阈值的 claim 不�
 一旦有了,证书将获得与覆盖率(第 5 节)相同的 anytime-valid 过期告警,输入的是 judge 对读者最终看到的文本
 所作的判断 —— 而不是对完整答案,否则就会因为过滤器移除的 claim 而错怪过滤器。
 
+### 再下一步:只请求有价值的标注
+
+上面所有证书都在等同一样东西:没人写过的人工标注。标注指南的结论是"预留 4–6 小时"。
+[ADR 0018](docs/adr/0018-active-anytime-certification.md) 把它变成产品内的闭环(Active Statistical
+Inference,Zrnic & Candès,ICML 2024)。服务端对**每一个**经 judge 判定的答案,按 judge 的结论设定概率 π,
+抛一枚加权硬币,并记录 π。被选中的答案进入 `/admin/review` 的**盲审**队列,不显示结论,也不显示分数。
+每条标注按 1/π 加权,无论 judge 错在哪里,都能无偏估计*真实*的 groundedness 比率,得到的区间可以每天查看
+(`make certify-review`)。
+
+模拟(`make eval-active`)发现的结论比实现本身更重要:
+
+- **教科书规则会输。** π ∝ √(f(1−f)) 把有把握的结论当作永远正确,面对三档 judge 时需要随机抽样
+  **2–3 倍的标注**,覆盖率也降到 89%。用上一周期标注学到的按结论误差模型比均匀抽样好 7–12%,离论文的
+  80% 很远。
+- **主动选出的标注不加权就会破坏共形校准。** 当 judge 对简单答案犹豫、对错误答案笃定时,用主动选出的
+  答案校准的 claim 阈值承诺 90%,实际只有 **60%**。按 1/π 加权(weighted conformal,Tibshirani et al.
+  2019)恢复到 **91.7%**。
+- **"随时有效"也需要预热。** 渐近置信序列从第一个答案开始读,在承诺 5% 的情况下有 30–70% 的运行错过真值,
+  所以在积累 60 条标注之前它不报告任何结果。精确的 betting 序列从未出错,但宽 3–4 倍,无法据此做决策。
+
 ### 现在调参器也必须证明自己
 
 夜间搜索在分层的开发集划分上进行,一个提案必须通过四道防线 —— 效应量下限、覆盖整个网格的 Holm 校正配对
@@ -377,7 +397,7 @@ JSONL 或 TREC qrels。
 因为它本来就是:如果它把 nDCG 算错了,下游的每个数字都会错,而构建中的其他任何东西都不会指出来。
 
 ```bash
-make eval-test     # 267 tests, standard library only, no stack, ~90s
+make eval-test     # 292 tests, standard library only, no stack, ~2 min
 ```
 
 - **闭式解** —— `k = n` 时的 `(α/2)^(1/n)`、均匀改进时的 `2^(1-k)`、R 的 `p.adjust` 示例、`(n+1)` 共形分位数校正。
@@ -388,7 +408,7 @@ make eval-test     # 267 tests, standard library only, no stack, ~90s
 - **端到端的评估框架** —— 针对一个可手算指标的桩检索后端,把四种门禁策略都驱动到两种结果,并断言序贯策略的
   节省是真实未发送的请求。
 
-此外还有 117 个后端单元测试,以及三套针对真实 ES、Kafka 和 MinIO 的 Testcontainers 集成测试。
+此外还有 131 个后端单元测试,以及三套针对真实 ES、Kafka 和 MinIO 的 Testcontainers 集成测试。
 
 ---
 
@@ -604,11 +624,14 @@ docs/adr/           every decision, including the ones that overturned earlier o
 - **[ADR 0015 — LLM judge 是测量工具,却从未被校准过](docs/adr/0015-prediction-powered-inference.md)**
 - **[ADR 0016 — 证书会过期,却没有任何东西告诉你](docs/adr/0016-adaptive-conformal-drift.md)**
 - **[ADR 0017 — 保证落到答案上:claim 级共形事实性](docs/adr/0017-claim-level-conformal-factuality.md)**
+- **[ADR 0018 — 只请求有价值的标注:主动且随时有效的认证](docs/adr/0018-active-anytime-certification.md)**
 
 (ADR 正文为英文。)
 
 ## 路线图
 
+- 把主动置信序列移植到 Java(与 `CoverageMonitor` 一样以黄金向量为准),让真实 groundedness 比率成为
+  实时指标而不是导出文件(ADR 0018)
 - 经认证的 claim 阈值(ADR 0017):`make collect-claims` 收集待标注的 observe 模式 claim,`make certify-claims`
   把它们转换为阈值 —— 缺的是按照[标注指南](docs/LABELING-GUIDE.md)标注几百条的人
 - 一旦有预算的 API key 使 CI 中的 LLM 判定可行,就把 groundedness 评估作为第二道 CI 门禁

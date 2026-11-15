@@ -67,3 +67,6 @@ backend-run.log
 
 # run_eval.py --records cache: a resume aid, not a result (docs/beir-results.json is).
 docs/beir-scores.json
+
+# review-queue exports hold production questions and answers
+eval/review-export.jsonl

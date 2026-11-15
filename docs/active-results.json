@@ -1,0 +1,119 @@
+{
+  "fixed": {
+    "calibrated": {
+      "uniform": {
+        "coverage": 0.9333333333333333,
+        "width": 0.0910821275504232,
+        "labels": 200.29666666666665,
+        "labels_saved": 0.0
+      },
+      "textbook": {
+        "coverage": 0.94,
+        "width": 0.1295458795861483,
+        "labels": 229.94,
+        "labels_saved": -1.0229300934483585
+      },
+      "learned": {
+        "coverage": 0.9666666666666667,
+        "width": 0.0863639737760439,
+        "labels": 200.98,
+        "labels_saved": 0.10091883306594707
+      }
+    },
+    "flattering": {
+      "uniform": {
+        "coverage": 0.9433333333333334,
+        "width": 0.10781894380778208,
+        "labels": 200.31666666666666,
+        "labels_saved": 0.0
+      },
+      "textbook": {
+        "coverage": 0.89,
+        "width": 0.18612340641993985,
+        "labels": 230.74333333333334,
+        "labels_saved": -1.979969632384794
+      },
+      "learned": {
+        "coverage": 0.95,
+        "width": 0.1039292707966763,
+        "labels": 199.09,
+        "labels_saved": 0.0708504649046694
+      }
+    },
+    "confidently wrong": {
+      "uniform": {
+        "coverage": 0.9466666666666667,
+        "width": 0.13988427290327454,
+        "labels": 199.04333333333332,
+        "labels_saved": 0.0
+      },
+      "textbook": {
+        "coverage": 0.91,
+        "width": 0.20566820884369016,
+        "labels": 224.76666666666668,
+        "labels_saved": -1.161705622150031
+      },
+      "learned": {
+        "coverage": 0.9666666666666667,
+        "width": 0.13125732980314722,
+        "labels": 199.82333333333332,
+        "labels_saved": 0.11954056738942653
+      }
+    }
+  },
+  "anytime": {
+    "calibrated": {
+      "exact_ever_excluded": 0.0,
+      "exact_width": 0.3445,
+      "asymptotic_ever_excluded": 0.02,
+      "asymptotic_width": 0.14443377711301256,
+      "fixed_width": 0.088145662019283
+    },
+    "flattering": {
+      "exact_ever_excluded": 0.0,
+      "exact_width": 0.33849999999999997,
+      "asymptotic_ever_excluded": 0.06,
+      "asymptotic_width": 0.17158681338362375,
+      "fixed_width": 0.10459667362871887
+    },
+    "confidently wrong": {
+      "exact_ever_excluded": 0.0,
+      "exact_width": 0.4345,
+      "asymptotic_ever_excluded": 0.006666666666666667,
+      "asymptotic_width": 0.3111573807262555,
+      "fixed_width": 0.13126543913630784
+    }
+  },
+  "claims": {
+    "calibrated": {
+      "naive": {
+        "all_supported": 0.9274466666666666,
+        "retention": 0.8925407221906286
+      },
+      "weighted": {
+        "all_supported": 0.9148333333333334,
+        "retention": 0.8924628067050996
+      }
+    },
+    "flattering": {
+      "naive": {
+        "all_supported": 0.9399266666666667,
+        "retention": 0.8684756531085811
+      },
+      "weighted": {
+        "all_supported": 0.91496,
+        "retention": 0.8919563428787092
+      }
+    },
+    "confidently wrong": {
+      "naive": {
+        "all_supported": 0.6019466666666667,
+        "retention": 1.0
+      },
+      "weighted": {
+        "all_supported": 0.9167799999999999,
+        "retention": 0.8760920210785099
+      }
+    }
+  }
+}

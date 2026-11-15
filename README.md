@@ -365,6 +365,31 @@ set does not exist yet, so no threshold ships. Once one does, the certificate ge
 anytime-valid expiry alarm as coverage (#5), fed the judge's verdict on the text the reader
 was left with — not the full answer, which would blame the filter for the claims it removed.
 
+### Then: asking for the labels that matter
+
+Every certificate above is waiting on the same thing: hand labels nobody has written. The
+labeling guide ends at "budget 4–6 hours". [ADR 0018](docs/adr/0018-active-anytime-certification.md)
+turns that into a product loop (Active Statistical Inference, Zrnic & Candès, ICML 2024).
+Serving tosses a weighted coin for **every** judged answer, with π set by the judge's
+verdict, and writes π down. Selected answers go to a **blind** queue at `/admin/review`, with
+no verdict and no score shown. Each label weighted by 1/π gives an unbiased estimate of the
+*true* groundedness rate, whatever the judge got wrong, with an interval that may be read
+every day (`make certify-review`).
+
+What the simulation (`make eval-active`) found matters more than the plumbing:
+
+- **The textbook rule loses.** π ∝ √(f(1−f)) treats a confident verdict as never wrong, so
+  against a three-verdict judge it needs **2–3× the labels** of random sampling, and coverage
+  slips to 89%. A per-verdict error model learned from the previous period's labels beats
+  uniform by 7–12%, honestly far from the paper's 80%.
+- **Active labels break conformal calibration unless reweighted.** When the judge is unsure
+  about easy answers and sure about the wrong ones, a claim threshold calibrated on the
+  actively chosen answers promises 90% and delivers **60%**. Weighting by 1/π (weighted
+  conformal, Tibshirani et al. 2019) restores **91.7%**.
+- **"Anytime" has a warm-up.** The asymptotic confidence sequence read from the first answer
+  missed the truth in 30–70% of runs against a 5% promise, so it stays silent until 60
+  labels. The exact betting sequence never missed, and is 3–4× too wide to steer by.
+
 ### And the tuner has to prove itself now
 
 The nightly sweep searches a stratified dev split, and a proposal must survive four guards —
@@ -442,7 +467,7 @@ Because it is: if it computes nDCG wrong, every number downstream is wrong and n
 the build will say so.
 
 ```bash
-make eval-test     # 267 tests, standard library only, no stack, ~90s
+make eval-test     # 292 tests, standard library only, no stack, ~2 min
 ```
 
 - **Closed forms** — `(α/2)^(1/n)` at `k = n`, `2^(1-k)` for a uniform improvement, R's
@@ -459,7 +484,7 @@ make eval-test     # 267 tests, standard library only, no stack, ~90s
   hand, driving all four gate policies into both outcomes and asserting the sequential one's
   saving is real requests not sent.
 
-Plus 117 backend unit tests and three Testcontainers integration suites against real ES, Kafka
+Plus 131 backend unit tests and three Testcontainers integration suites against real ES, Kafka
 and MinIO.
 
 ---
@@ -697,9 +722,12 @@ docs/adr/           every decision, including the ones that overturned earlier o
 - **[ADR 0015 — The LLM judge is a measuring instrument, and it was never calibrated](docs/adr/0015-prediction-powered-inference.md)**
 - **[ADR 0016 — The certificate expires, and nothing tells you](docs/adr/0016-adaptive-conformal-drift.md)**
 - **[ADR 0017 — The guarantee reaches the answer: claim-level conformal factuality](docs/adr/0017-claim-level-conformal-factuality.md)**
+- **[ADR 0018 — Asking for the labels that matter: active, anytime-valid certification](docs/adr/0018-active-anytime-certification.md)**
 
 ## Roadmap
 
+- Porting the active confidence sequence to Java (golden vectors, like `CoverageMonitor`) so the
+  true groundedness rate is a live gauge, not an export (ADR 0018)
 - A certified claim threshold (ADR 0017): `make collect-claims` gathers observe-mode claims
   to label and `make certify-claims` turns them into the threshold — what is missing is the
   person labelling a few hundred of them, per the [labeling guide](docs/LABELING-GUIDE.md)

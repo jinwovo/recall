@@ -343,6 +343,28 @@ claim ごとの人によるラベルを `python eval/factuality.py labels.jsonl`
 テキストに対するものになります — 回答全体を判定すると、フィルタが取り除いた claim のせいでフィルタを
 責めることになるからです。
 
+### その次: 意味のあるラベルだけを求める
+
+上のすべての証明書は同じものを待っています。誰も書いていない人手のラベルです。ラベル付けガイドの結論は
+「4〜6 時間を見込む」でした。[ADR 0018](docs/adr/0018-active-anytime-certification.md) はこれを製品の
+ループに変えます(Active Statistical Inference、Zrnic & Candès、ICML 2024)。サービングは judge が判定した
+**すべて**の回答について、judge の判定で決まる確率 π の重み付きコインを投げ、π を記録します。選ばれた回答は
+`/admin/review` の**ブラインド**キューに入り、判定もスコアも表示されません。各ラベルを 1/π で重み付けすると、
+judge が何を間違えていても*真の* groundedness 率を不偏に推定でき、毎日見ても有効な区間が得られます
+(`make certify-review`)。
+
+シミュレーション(`make eval-active`)の結果は、実装そのものより重要です。
+
+- **教科書どおりの規則は負けます。** π ∝ √(f(1−f)) は確信のある判定を決して間違えないものとして扱うため、
+  3 段階の judge ではランダム抽出の **2〜3 倍のラベル**が必要になり、カバレッジも 89% に落ちます。前期間の
+  ラベルから判定ごとの誤差モデルを学習すると一様抽出より 7〜12% 良くなります。論文の 80% には遠く及びません。
+- **能動的に選んだラベルは、重み付けしなければ conformal 校正を壊します。** judge が易しい回答に迷い、
+  間違った回答に確信を持つ場合、能動的に選んだ回答で校正した claim 閾値は 90% を約束して **60%** しか
+  達成しません。1/π の重み付け(weighted conformal、Tibshirani et al. 2019)で **91.7%** に戻ります。
+- **「Anytime」にもウォームアップが要ります。** 漸近的 confidence sequence を最初の回答から読むと、5% を
+  約束しながら 30〜70% の実行で真値を外しました。そのためラベルが 60 件たまるまで何も報告しません。厳密な
+  betting 方式は一度も外れませんでしたが、意思決定に使うには 3〜4 倍広すぎます。
+
 ### そして今度はチューナーも自らを証明しなければならない
 
 夜間の探索は層化された開発用分割を探索し、提案は 4 つのガードを通過しなければなりません — 効果量の下限、
@@ -417,7 +439,7 @@ TREC qrels です。
 言いません。
 
 ```bash
-make eval-test     # 267 tests, standard library only, no stack, ~90s
+make eval-test     # 292 tests, standard library only, no stack, ~2 min
 ```
 
 - **閉形式** — `k = n` での `(α/2)^(1/n)`、一様な改善に対する `2^(1-k)`、R の `p.adjust` の例題、`(n+1)`
@@ -431,7 +453,7 @@ make eval-test     # 267 tests, standard library only, no stack, ~90s
 - **ハーネスのエンドツーエンド** — 指標を手で導出できるスタブ検索バックエンドに対して、4 つのゲートポリシー
   すべてを両方の結果に追い込み、逐次ポリシーの削減が実際に送られなかったリクエストであることを確認します。
 
-これに加えて、バックエンドの単体テスト 117 個と、実際の ES、Kafka、MinIO に対する Testcontainers 統合
+これに加えて、バックエンドの単体テスト 131 個と、実際の ES、Kafka、MinIO に対する Testcontainers 統合
 テストスイート 3 つがあります。
 
 ---
@@ -664,11 +686,14 @@ docs/adr/           every decision, including the ones that overturned earlier o
 - **[ADR 0015 — LLM judge は計測器であり、一度も較正されていなかった](docs/adr/0015-prediction-powered-inference.md)**
 - **[ADR 0016 — 証明書は失効し、誰も教えてくれない](docs/adr/0016-adaptive-conformal-drift.md)**
 - **[ADR 0017 — 保証が回答に届く: claim 単位の conformal 事実性](docs/adr/0017-claim-level-conformal-factuality.md)**
+- **[ADR 0018 — 意味のあるラベルだけを求める: 能動的で anytime-valid な証明](docs/adr/0018-active-anytime-certification.md)**
 
 (ADR の本文は英語です。)
 
 ## ロードマップ
 
+- 能動的 confidence sequence を Java に移植し(`CoverageMonitor` と同じくゴールデンベクトル基準)、真の
+  groundedness 率を export ではなくライブのゲージに(ADR 0018)
 - 証明済みの claim 閾値(ADR 0017): `make collect-claims` がラベル付け用の observe モードの claim を集め、
   `make certify-claims` がそれを閾値に変換します — 足りないのは、[ラベル付けガイド](docs/LABELING-GUIDE.md)
   に従って数百件にラベルを付ける人です

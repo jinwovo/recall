@@ -23,6 +23,7 @@ import com.portfolio.recall.llm.LlmClient;
 import com.portfolio.recall.llm.ModelTier;
 import com.portfolio.recall.llm.StreamChunk;
 import com.portfolio.recall.persistence.QueryLogService;
+import com.portfolio.recall.review.ReviewSampler;
 import com.portfolio.recall.search.RetrievedChunk;
 import com.portfolio.recall.search.SearchService;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -48,6 +49,7 @@ class RagServiceFinishReasonTest {
     /** Disabled unless a test enables it — Mockito answers enabled() with false. */
     private final ClaimVerifier claimVerifier = mock(ClaimVerifier.class);
     private final FactualityMonitor factualityMonitor = mock(FactualityMonitor.class);
+    private final ReviewSampler review = mock(ReviewSampler.class);
     private final SemanticCacheService cache = mock(SemanticCacheService.class);
     /** Off unless a test turns it on. */
     private final GroundednessJudge judge = mock(GroundednessJudge.class);
@@ -80,7 +82,7 @@ class RagServiceFinishReasonTest {
                 null);
 
         return new RagService(search, embeddings, cache, llm, judge, sufficiency, sizer,
-                mock(CoverageMonitor.class), claimVerifier, factualityMonitor, queryLog, new ObjectMapper(), meters, props);
+                mock(CoverageMonitor.class), claimVerifier, factualityMonitor, review, queryLog, new ObjectMapper(), meters, props);
     }
 
     private void provider(FinishReason reason) {
@@ -233,5 +235,32 @@ class RagServiceFinishReasonTest {
         drain();
 
         verify(cache).put(any(), anyString(), anyString());
+    }
+
+    @Test
+    void everyJudgedAnswerIsOfferedForReviewWithTheVerdictOnWhatWasGenerated() {
+        // The review ledger needs the judge's prediction on every judged answer, selected or
+        // not (docs/adr/0018) - and on the answer as generated, since that is what the
+        // reviewer will label.
+        provider(FinishReason.COMPLETE);
+        when(judge.enabled()).thenReturn(true);
+        when(judge.judge(anyString(), any(), anyString()))
+                .thenReturn(Mono.just(Optional.of(Judgment.Verdict.PARTIAL.toJudgment())));
+
+        drain();
+
+        verify(review).offer(eq("q"), any(), eq("The answer is forty"),
+                eq(Judgment.Verdict.PARTIAL.toJudgment()), eq(Optional.empty()));
+    }
+
+    @Test
+    void anUnjudgedAnswerIsNotOffered() {
+        // No prediction, no row: the estimate is over judged answers, and an unjudged one
+        // has nothing for a label to correct.
+        provider(FinishReason.COMPLETE);
+
+        drain();
+
+        verify(review, never()).offer(anyString(), any(), anyString(), any(), any());
     }
 }

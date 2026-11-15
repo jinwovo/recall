@@ -342,6 +342,29 @@ cross-encoder로 judge와 병렬로 채점하고, 임계값 이하의 claim은 �
 같은 anytime-valid 만료 경보(5번)를 받으며, judge의 판정은 전체 답변이 아니라 독자에게 남겨진 텍스트에
 대한 것입니다 — 전체 답변을 판정하면 필터가 제거한 claim 때문에 필터를 탓하게 되기 때문입니다.
 
+### 그다음: 의미 있는 라벨만 요청하기
+
+위의 모든 인증서는 같은 것을 기다립니다. 아무도 작성하지 않은 사람 라벨입니다. 라벨링 가이드의 결론은
+"4–6시간을 잡으세요"였습니다. [ADR 0018](docs/adr/0018-active-anytime-certification.md)은 이것을 제품
+루프로 바꿉니다(Active Statistical Inference, Zrnic & Candès, ICML 2024). 서빙은 judge가 판정한
+**모든** 답변마다 judge의 판정에 따라 정한 확률 π로 가중 동전을 던지고, 그 π를 기록합니다. 뽑힌 답변은
+`/admin/review`의 **블라인드** 큐로 갑니다. 판정도 점수도 보여주지 않습니다. 각 라벨에 1/π 가중치를
+주면, judge가 무엇을 틀렸든 *진짜* groundedness 비율을 편향 없이 추정할 수 있고, 매일 들여다봐도 유효한
+구간이 나옵니다(`make certify-review`).
+
+시뮬레이션(`make eval-active`)에서 나온 결과가 구현보다 더 중요합니다.
+
+- **교과서 규칙은 집니다.** π ∝ √(f(1−f))는 확신에 찬 판정이 절대 틀리지 않는다고 가정합니다. 그래서
+  판정이 세 단계뿐인 judge에서는 무작위 추출보다 **라벨이 2–3배** 더 필요하고, 커버리지도 89%로
+  떨어집니다. 이전 기간의 라벨로 판정별 오차 모델을 학습하면 균등 추출보다 7–12% 낫습니다. 논문의
+  80%와는 거리가 멉니다.
+- **능동 라벨은 가중치를 주지 않으면 conformal 보정을 깨뜨립니다.** judge가 쉬운 답변에는 망설이고 틀린
+  답변에는 확신한다면, 능동적으로 고른 답변으로 보정한 claim 임계값은 90%를 약속하고 **60%**를
+  냅니다. 1/π 가중치(weighted conformal, Tibshirani et al. 2019)를 주면 **91.7%**로 회복됩니다.
+- **"Anytime"에도 워밍업이 필요합니다.** 점근적 confidence sequence를 첫 답변부터 읽으면 5%를
+  약속하고도 30–70%의 실행에서 진짜 값을 놓쳤습니다. 그래서 라벨이 60개 쌓일 때까지는 아무것도
+  보고하지 않습니다. 정확한 betting 방식은 한 번도 틀리지 않았지만, 의사결정에 쓰기에는 3–4배 넓습니다.
+
 ### 그리고 이제 튜너도 스스로를 증명해야 합니다
 
 야간 탐색은 층화된 개발 분할을 탐색하고, 제안은 네 개의 가드를 통과해야 합니다 — 효과 크기 하한,
@@ -414,7 +437,7 @@ rag-eval-gate audit -n 10 -v 1.00 -b 0.70    # or audit a published table, with 
 것도 그렇다고 말하지 않습니다.
 
 ```bash
-make eval-test     # 267 tests, standard library only, no stack, ~90s
+make eval-test     # 292 tests, standard library only, no stack, ~2 min
 ```
 
 - **닫힌 형식** — `k = n`에서 `(α/2)^(1/n)`, 균일 개선에 대한 `2^(1-k)`, R의 `p.adjust` 예제,
@@ -428,7 +451,7 @@ make eval-test     # 267 tests, standard library only, no stack, ~90s
 - **하네스 종단 간** — 손으로 지표를 유도할 수 있는 스텁 검색 백엔드에 대해, 네 가지 게이트 정책을
   두 결과 모두로 몰고 가며, 순차 정책의 절감이 실제로 보내지 않은 요청임을 확인합니다.
 
-여기에 백엔드 단위 테스트 117개와, 실제 ES, Kafka, MinIO에 대한 Testcontainers 통합 테스트 스위트 세 개가
+여기에 백엔드 단위 테스트 131개와, 실제 ES, Kafka, MinIO에 대한 Testcontainers 통합 테스트 스위트 세 개가
 더해집니다.
 
 ---
@@ -656,11 +679,14 @@ docs/adr/           every decision, including the ones that overturned earlier o
 - **[ADR 0015 — LLM judge는 측정 도구이며, 한 번도 보정된 적이 없었다](docs/adr/0015-prediction-powered-inference.md)**
 - **[ADR 0016 — 인증서는 만료되며, 아무도 알려주지 않는다](docs/adr/0016-adaptive-conformal-drift.md)**
 - **[ADR 0017 — 보증이 답변에 닿는다: claim 단위 conformal 사실성](docs/adr/0017-claim-level-conformal-factuality.md)**
+- **[ADR 0018 — 의미 있는 라벨만 요청하기: 능동적이고 anytime-valid한 인증](docs/adr/0018-active-anytime-certification.md)**
 
 (ADR 본문은 영어입니다.)
 
 ## 로드맵
 
+- 능동 confidence sequence를 Java로 이식(`CoverageMonitor`처럼 골든 벡터 기반)해서, 진짜 groundedness
+  비율을 export가 아닌 실시간 게이지로(ADR 0018)
 - 인증된 claim 임계값(ADR 0017): `make collect-claims`가 라벨링할 observe 모드 claim을 모으고
   `make certify-claims`가 이를 임계값으로 바꿉니다 — 빠진 것은 [라벨링 가이드](docs/LABELING-GUIDE.ko.md)에
   따라 수백 개를 라벨링할 사람입니다

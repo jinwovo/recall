@@ -1,4 +1,4 @@
-.PHONY: up down logs backend frontend seed seed-corpus ingest eval eval-gate eval-sweep eval-test eval-stats eval-anytime eval-ppi eval-adaptive eval-factuality collect-claims certify-claims beir beir-eval calibrate loadtest
+.PHONY: up down logs backend frontend seed seed-corpus ingest eval eval-gate eval-sweep eval-test eval-stats eval-anytime eval-ppi eval-adaptive eval-factuality eval-active collect-claims certify-claims certify-review beir beir-eval calibrate loadtest
 
 up:            ## start infra (ES, Redis, Postgres, Kafka, MinIO, sidecar, Prometheus, Grafana)
 	docker compose up -d
@@ -53,6 +53,13 @@ eval-factuality: ## reproduce the claim-level factuality experiment (docs/adr/00
 
 collect-claims: ## observe mode -> eval/claims-to-label.jsonl for a person to label (docs/adr/0017; needs the stack up)
 	cd eval && python collect_claims.py $(or $(GOLD),gold.jsonl) claims-to-label.jsonl
+
+eval-active:   ## reproduce the active, anytime-valid certification experiment (docs/adr/0018) — no stack needed
+	cd eval && python active_experiment.py --markdown ../docs/active-results.md --json ../docs/active-results.json
+
+certify-review: ## review-queue export -> true groundedness rate, claim threshold, next design (docs/adr/0018; needs the stack up)
+	curl -sf $(or $(API),http://localhost:8080)/api/admin/review/export > eval/review-export.jsonl
+	cd eval && python active.py review-export.jsonl --budget $(or $(BUDGET),0.05)
 
 certify-claims: ## labelled claims -> the threshold to paste into recall.rag.factuality (docs/adr/0017)
 	cd eval && python factuality.py $(or $(LABELS),claims-to-label.jsonl) --alpha $(or $(ALPHA),0.10)
