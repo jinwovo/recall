@@ -30,7 +30,7 @@ services:
       retries: 10
 
   postgres:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     container_name: recall-postgres
     environment:
       POSTGRES_DB: recall
@@ -45,7 +45,7 @@ services:
     volumes: ["pg-data:/var/lib/postgresql/data"]
 
   kafka:
-    image: apache/kafka:3.8.0
+    image: apache/kafka:4.3.1
     container_name: recall-kafka
     ports: ["29092:29092"]            # host access via localhost:29092
     environment:
