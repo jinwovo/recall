@@ -18,11 +18,13 @@ jobs:
           distribution: temurin
           java-version: "21"
       # Provisions a Gradle CLI on PATH (no committed wrapper needed for CI).
-      # Held at v5: upgrading to v6 accepts Gradle's Terms of Use for its proprietary
-      # caching component. That is the owner's call, not a version bump (see dependabot.yml).
-      - uses: gradle/actions/setup-gradle@v5
+      # cache-provider: basic keeps caching on the MIT-licensed provider (a thin wrapper over
+      # actions/cache). v6's default, "enhanced", loads the proprietary gradle-actions-caching
+      # component and accepts Gradle's Terms of Use. This repo does not opt into that.
+      - uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: "8.14.8"
+          cache-provider: basic
       - run: gradle test --no-daemon
 
   frontend:
