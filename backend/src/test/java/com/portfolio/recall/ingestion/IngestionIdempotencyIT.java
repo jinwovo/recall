@@ -59,7 +59,7 @@ class IngestionIdempotencyIT {
         assumeTrue(DockerClientFactory.instance().isDockerAvailable(), "Docker required for this IT");
 
         // Stock ES images ship without Nori — build the plugin in, mirroring infra/elasticsearch.
-        String noriImage = new ImageFromDockerfile("recall-es-nori-it:8.18.2", false)
+        String noriImage = new ImageFromDockerfile("recall-es-nori-it:8.19.26", false)
                 .withDockerfileFromBuilder(b -> b
                         .from(ES_BASE_IMAGE)
                         .run("bin/elasticsearch-plugin install --batch analysis-nori"))

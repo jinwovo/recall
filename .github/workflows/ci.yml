@@ -22,7 +22,7 @@ jobs:
       # caching component. That is the owner's call, not a version bump (see dependabot.yml).
       - uses: gradle/actions/setup-gradle@v5
         with:
-          gradle-version: "8.10.2"
+          gradle-version: "8.14.8"
       - run: gradle test --no-daemon
 
   frontend:
