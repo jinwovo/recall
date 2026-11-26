@@ -12,8 +12,9 @@ updates:
       actions:
         patterns: ["*"]
     ignore:
-      # v6 accepts Gradle's Terms of Use for its proprietary caching component. That needs
-      # a deliberate owner decision, so Dependabot must not propose it as a routine bump.
+      # Majors have changed licence terms before: v6 moved its default caching to a
+      # proprietary component, which ci.yml avoids with cache-provider: basic. Read a new
+      # major's terms before taking it. Dependabot must not propose one as a routine bump.
       - dependency-name: gradle/actions
         update-types: ["version-update:semver-major"]
 
