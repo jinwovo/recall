@@ -12,7 +12,7 @@ public final class TestImages {
     public static final String KAFKA = "apache/kafka:3.8.0";
 
     /** Stock ES; IngestionIdempotencyIT builds Nori into it, mirroring infra/elasticsearch. */
-    public static final String ELASTICSEARCH = "docker.elastic.co/elasticsearch/elasticsearch:8.18.2";
+    public static final String ELASTICSEARCH = "docker.elastic.co/elasticsearch/elasticsearch:8.19.26";
 
     /**
      * MinIO stopped publishing community images: {@code minio/minio} is gone from Docker Hub and
