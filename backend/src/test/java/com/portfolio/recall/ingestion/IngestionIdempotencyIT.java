@@ -43,7 +43,7 @@ import org.testcontainers.utility.DockerImageName;
 @Tag("integration")
 class IngestionIdempotencyIT {
 
-    private static final String ES_BASE_IMAGE = "docker.elastic.co/elasticsearch/elasticsearch:8.18.2";
+    private static final String ES_BASE_IMAGE = com.portfolio.recall.TestImages.ELASTICSEARCH;
     private static final int EMBEDDING_DIM = 64;   // >= 64 so the BBQ mapping path (adr/0009) is exercised
     private static final AtomicInteger INDEX_SEQ = new AtomicInteger();
 

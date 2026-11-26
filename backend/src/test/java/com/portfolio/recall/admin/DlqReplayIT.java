@@ -93,7 +93,7 @@ class DlqReplayIT {
     private static final String INGESTION_TOPIC = "recall.ingestion";
     private static final String DLQ_TOPIC = "recall.ingestion.dlq";
 
-    private static KafkaContainer kafka = new KafkaContainer("apache/kafka:3.8.0");
+    private static KafkaContainer kafka = new KafkaContainer(com.portfolio.recall.TestImages.KAFKA);
     private static MinIOContainer minio = new MinIOContainer(com.portfolio.recall.TestImages.MINIO);
 
     @Autowired private KafkaTemplate<String, String> template;
