@@ -82,7 +82,7 @@ class IngestionReliabilityIT {
     private static final int INLINE_MAX_BYTES = 256;
 
     private static KafkaContainer kafka = new KafkaContainer("apache/kafka:3.8.0");
-    private static MinIOContainer minio = new MinIOContainer("minio/minio:RELEASE.2024-12-18T13-15-44Z");
+    private static MinIOContainer minio = new MinIOContainer(com.portfolio.recall.TestImages.MINIO);
 
     @Autowired private KafkaTemplate<String, String> template;
     @Autowired private IngestionService ingestionService;
