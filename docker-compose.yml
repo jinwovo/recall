@@ -63,7 +63,9 @@ services:
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
 
   minio:
-    image: minio/minio:latest
+    # minio/minio is no longer published (Docker Hub / quay.io). Chainguard's build, pinned by
+    # digest because its free tier only tags `latest`. Keep in sync with backend TestImages.MINIO.
+    image: cgr.dev/chainguard/minio@sha256:f6243be11aaaa2fe654d260558e2b3fcef50135e78a3abfd0db802b13444f059
     container_name: recall-minio
     command: server /data --console-address ":9001"
     environment:
