@@ -1,0 +1,33 @@
+name: images
+
+# Upstream availability guard for every container image the repo pulls (scripts/check_images.py).
+# minio/minio was withdrawn from Docker Hub and quay.io, and the nightly tune workflow failed at
+# `docker compose up` for 2.5 months before the cause was found. This asks each registry directly,
+# with no pull and no warm cache, so a withdrawn image fails here by name. The weekly schedule
+# catches withdrawals that happen while no one is pushing.
+
+on:
+  push:
+    branches: [main]
+    paths: &image_paths
+      - "docker-compose*.yml"
+      - "**/Dockerfile*"
+      - "backend/src/test/java/com/portfolio/recall/TestImages.java"
+      - "scripts/check_images.py"
+      - ".github/workflows/images.yml"
+  pull_request:
+    paths: *image_paths
+  schedule:
+    - cron: "0 0 * * 1"         # Mondays 09:00 KST
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - run: python3 scripts/check_images.py

@@ -1,0 +1,44 @@
+version: 2
+
+# Keeps the CI toolchain and base images current, so they do not drift until they break.
+# The actions here had fallen 2-3 majors behind, onto a deprecated Node 20 runtime.
+# Weekly, grouped: one PR per ecosystem, not one per package.
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+    ignore:
+      # v6 accepts Gradle's Terms of Use for its proprietary caching component. That needs
+      # a deliberate owner decision, so Dependabot must not propose it as a routine bump.
+      - dependency-name: gradle/actions
+        update-types: ["version-update:semver-major"]
+
+  # Image references in compose, including the digest-pinned Chainguard MinIO. Its digest
+  # also lives in backend TestImages.MINIO, which Dependabot cannot see; update it in the
+  # same PR. The images workflow fails until the two match a pullable image.
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      compose:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directories:
+      - /backend
+      - /embedding-service
+      - /infra/elasticsearch
+    schedule:
+      interval: weekly
+    groups:
+      base-images:
+        patterns: ["*"]
+    ignore:
+      # Majors move the runtime (JDK, Python, ES): those are code changes, not bumps.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
