@@ -27,6 +27,11 @@ updates:
     groups:
       compose:
         patterns: ["*"]
+    ignore:
+      # Same rule as base images. Postgres 16→18 needs a data-directory upgrade, and
+      # Kafka 3→4 is a broker major. Those are migrations, not bumps.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: docker
     directories:
