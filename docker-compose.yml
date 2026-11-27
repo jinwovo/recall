@@ -45,7 +45,7 @@ services:
     volumes: ["pg-data:/var/lib/postgresql/data"]
 
   kafka:
-    image: apache/kafka:3.8.0
+    image: apache/kafka:3.9.2
     container_name: recall-kafka
     ports: ["29092:29092"]            # host access via localhost:29092
     environment:
@@ -65,7 +65,7 @@ services:
   minio:
     # minio/minio is no longer published (Docker Hub / quay.io). Chainguard's build, pinned by
     # digest because its free tier only tags `latest`. Keep in sync with backend TestImages.MINIO.
-    image: cgr.dev/chainguard/minio@sha256:f6243be11aaaa2fe654d260558e2b3fcef50135e78a3abfd0db802b13444f059
+    image: cgr.dev/chainguard/minio@sha256:b9b1cce81a4a6cc9bf250e68d621cc0b9fb8ed15aefe18fcd1840525eab6a81a
     container_name: recall-minio
     command: server /data --console-address ":9001"
     environment:
