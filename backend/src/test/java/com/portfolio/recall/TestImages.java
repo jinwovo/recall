@@ -9,7 +9,7 @@ import org.testcontainers.utility.DockerImageName;
  */
 public final class TestImages {
 
-    public static final String KAFKA = "apache/kafka:3.8.0";
+    public static final String KAFKA = "apache/kafka:3.9.2";
 
     /** Stock ES; IngestionIdempotencyIT builds Nori into it, mirroring infra/elasticsearch. */
     public static final String ELASTICSEARCH = "docker.elastic.co/elasticsearch/elasticsearch:8.19.26";
@@ -21,7 +21,7 @@ public final class TestImages {
      * the same digest as docker-compose.yml. Bump both together.
      */
     public static final DockerImageName MINIO = DockerImageName
-            .parse("cgr.dev/chainguard/minio@sha256:f6243be11aaaa2fe654d260558e2b3fcef50135e78a3abfd0db802b13444f059")
+            .parse("cgr.dev/chainguard/minio@sha256:b9b1cce81a4a6cc9bf250e68d621cc0b9fb8ed15aefe18fcd1840525eab6a81a")
             .asCompatibleSubstituteFor("minio/minio");
 
     private TestImages() {}
